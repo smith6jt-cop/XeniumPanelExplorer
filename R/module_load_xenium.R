@@ -1,13 +1,173 @@
 #' Load Xenium module — directory / .rds / .h5ad chooser + cache via qs2.
-#' M1 stub; populated in M3 (CLAUDE.md §5 tab 3).
+#'
+#' Three input paths (CLAUDE.md §2): a Xenium output bundle directory,
+#' a saved Seurat `.rds` / `.qs2`, or an AnnData `.h5ad` (TODO).
+#' After load, renders cell/gene counts, the panel-validation report,
+#' and a rasterized spatial preview.
 
 load_xenium_ui <- function(id) {
   ns <- shiny::NS(id)
-  placeholder_card("Load Xenium", app_milestones$load_xenium)
+  bslib::layout_sidebar(
+    sidebar = bslib::sidebar(
+      width = 320,
+      shiny::h5("Load a Xenium dataset"),
+      shinyFiles::shinyDirButton(ns("bundle_dir"),
+                                 "Pick Xenium bundle directory",
+                                 title  = "Select Xenium output bundle"),
+      shiny::br(), shiny::br(),
+      shinyFiles::shinyFilesButton(ns("rds_file"),
+                                   "Pick saved Seurat (.rds / .qs2)",
+                                   title  = "Select saved Seurat object",
+                                   multiple = FALSE),
+      shiny::br(), shiny::br(),
+      shiny::textInput(ns("manual_path"),
+                       "Or paste a path",
+                       placeholder = "/path/to/xenium_outs"),
+      shiny::actionButton(ns("load_manual"), "Load from path",
+                          class = "btn-primary"),
+      shiny::hr(),
+      shiny::checkboxInput(ns("force_refresh"),
+                           "Bypass cache (force re-ingest)",
+                           value = FALSE),
+      shiny::p(shiny::em("Caches are written to "),
+               shiny::code(app_paths$cache),
+               shiny::em(" keyed by absolute path + mtime."))
+    ),
+    bslib::card(
+      bslib::card_header("Load status"),
+      shiny::uiOutput(ns("status"))
+    ),
+    bslib::card(
+      bslib::card_header("Panel validation"),
+      shiny::uiOutput(ns("validation"))
+    ),
+    bslib::card(
+      bslib::card_header("Spatial preview"),
+      shiny::p("Rasterized scatter of cell centroids ",
+               "(", shiny::code("x_centroid"), " vs ",
+               shiny::code("y_centroid"), ")."),
+      plotly::plotlyOutput(ns("spatial"), height = "520px")
+    )
+  )
 }
 
-load_xenium_server <- function(id) {
+load_xenium_server <- function(id, panels, app_state) {
   shiny::moduleServer(id, function(input, output, session) {
-    invisible(NULL)
+    roots <- c(home = fs::path_home(),
+               root = "/",
+               cwd  = normalizePath("."))
+    shinyFiles::shinyDirChoose(input, "bundle_dir", roots = roots,
+                               allowDirCreate = FALSE)
+    shinyFiles::shinyFileChoose(input, "rds_file", roots = roots,
+                                filetypes = c("rds", "qs", "qs2"))
+
+    chosen_path <- shiny::reactiveVal(NULL)
+
+    shiny::observeEvent(input$bundle_dir, {
+      sel <- shinyFiles::parseDirPath(roots, input$bundle_dir)
+      if (length(sel) == 1L && nzchar(sel)) chosen_path(as.character(sel))
+    })
+    shiny::observeEvent(input$rds_file, {
+      sel <- shinyFiles::parseFilePaths(roots, input$rds_file)
+      if (nrow(sel) == 1L) chosen_path(as.character(sel$datapath[1]))
+    })
+    shiny::observeEvent(input$load_manual, {
+      p <- input$manual_path
+      if (!is.null(p) && nzchar(p)) chosen_path(p)
+    })
+
+    waiter::useWaiter()
+
+    xen_load <- shiny::reactive({
+      p <- chosen_path()
+      shiny::req(p)
+      w <- waiter::Waiter$new(
+        html = shiny::tagList(
+          waiter::spin_dots(),
+          shiny::h4("Loading Xenium dataset…")
+        ),
+        color = "rgba(0,0,0,0.55)"
+      )
+      w$show()
+      on.exit(w$hide(), add = TRUE)
+      tryCatch(
+        load_xenium(p, refresh = isTRUE(input$force_refresh)),
+        error = function(e) structure(list(error = conditionMessage(e)),
+                                       class = "load_xenium_error")
+      )
+    })
+
+    shiny::observeEvent(xen_load(), {
+      out <- xen_load()
+      if (inherits(out, "load_xenium_error")) {
+        app_state$xen <- NULL
+        return()
+      }
+      app_state$xen      <- out
+      app_state$xen_path <- chosen_path()
+    }, ignoreNULL = FALSE)
+
+    output$status <- shiny::renderUI({
+      out <- xen_load()
+      if (inherits(out, "load_xenium_error")) {
+        return(shiny::div(class = "alert alert-danger",
+                          shiny::strong("Load failed: "), out$error))
+      }
+      shiny::req(out)
+      cache_info <- attr(out, "load_xenium_cache")
+      shiny::tagList(
+        shiny::p(shiny::strong("Path: "), shiny::code(chosen_path())),
+        shiny::p(shiny::strong("Class: "), class(out)[1]),
+        shiny::p(shiny::strong("Cells: "),  ncol(out)),
+        shiny::p(shiny::strong("Genes: "),  nrow(out)),
+        shiny::p(shiny::strong("Cache: "),
+                 if (isTRUE(cache_info$hit)) "hit (read from qs2)"
+                 else paste0("miss (wrote ", basename(cache_info$file %||% ""), ")"))
+      )
+    })
+
+    output$validation <- shiny::renderUI({
+      out <- xen_load()
+      if (inherits(out, "load_xenium_error") || is.null(out)) {
+        return(shiny::p(shiny::em("Load a dataset to validate.")))
+      }
+      rep <- panel_validate(rownames(out), panels())
+      cls <- if (rep$pct_reference_covered >= 0.95) "alert-success"
+             else if (rep$pct_reference_covered >= 0.5) "alert-warning"
+             else "alert-info"
+      shiny::div(class = paste("alert", cls),
+                 panel_validate_summary(rep))
+    })
+
+    output$spatial <- plotly::renderPlotly({
+      out <- xen_load()
+      shiny::req(out)
+      if (inherits(out, "load_xenium_error")) return(NULL)
+      md <- out@meta.data
+      if (!all(c("x_centroid", "y_centroid") %in% names(md))) {
+        return(plotly::plotly_empty(type = "scatter", mode = "markers") |>
+                 plotly::layout(annotations = list(list(
+                   text = "x_centroid / y_centroid not in meta.data",
+                   showarrow = FALSE, x = 0.5, y = 0.5,
+                   xref = "paper", yref = "paper"))))
+      }
+      n  <- nrow(md)
+      sz <- if (n > 50000L) 2 else if (n > 10000L) 3 else 4
+      plotly::plot_ly(
+        md, x = ~x_centroid, y = ~y_centroid,
+        type = "scattergl", mode = "markers",
+        marker = list(size = sz, opacity = 0.7,
+                      color = "rgba(31,119,180,0.6)"),
+        hoverinfo = "skip"
+      ) |>
+        plotly::layout(
+          xaxis = list(title = "x_centroid",
+                       scaleanchor = "y", scaleratio = 1),
+          yaxis = list(title = "y_centroid"),
+          showlegend = FALSE
+        )
+    })
   })
 }
+
+`%||%` <- function(a, b) if (is.null(a)) b else a

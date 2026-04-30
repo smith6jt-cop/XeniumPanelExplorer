@@ -27,7 +27,9 @@ xenium_panel_app <- function() {
     # `value` of the nav_panel to switch to.
     app_state <- shiny::reactiveValues(
       selected_subpanel = NULL,
-      nav_target        = NULL
+      nav_target        = NULL,
+      xen               = NULL,
+      xen_path          = NULL
     )
 
     # Loaded once at session start. Wrap in a reactive so future M-x
@@ -38,7 +40,7 @@ xenium_panel_app <- function() {
 
     overview_server("overview",          panels, app_state)
     panel_browser_server("panel_browser", panels, app_state)
-    load_xenium_server("load_xenium")
+    load_xenium_server("load_xenium",    panels, app_state)
     panel_compare_server("panel_compare")
     cluster_server("cluster")
     subcluster_server("subcluster")
