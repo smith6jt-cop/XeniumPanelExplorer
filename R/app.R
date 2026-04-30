@@ -36,7 +36,8 @@ xenium_panel_app <- function() {
       compare_min_det   = 0,
       compare_topn      = 10,
       cluster_stack     = list(),
-      subcluster_error  = NULL
+      subcluster_error  = NULL,
+      markers_error     = NULL
     )
 
     # Whenever a fresh root run lands in xen_clustered, reset the
@@ -68,7 +69,7 @@ xenium_panel_app <- function() {
     panel_compare_server("panel_compare", panels, app_state)
     cluster_server("cluster", panels, app_state)
     subcluster_server("subcluster", panels, app_state)
-    marker_server("marker")
+    marker_server("marker", panels, app_state)
     clustree_server("clustree", panels, app_state)
     export_server("export")
 

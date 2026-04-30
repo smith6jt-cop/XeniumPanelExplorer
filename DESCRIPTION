@@ -28,6 +28,8 @@ Imports:
     harmony (>= 1.2.0),
     clustree (>= 0.5.1),
     aricode,
+    presto (>= 1.0.0),
+    viridisLite (>= 0.4.2),
     scales,
     ggrastr (>= 1.0.2),
     fs (>= 1.6.4),
