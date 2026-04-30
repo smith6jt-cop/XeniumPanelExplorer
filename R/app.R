@@ -6,6 +6,9 @@
 #'
 #' @export
 xenium_panel_app <- function() {
+  env_check <- check_environment()
+  print_environment_check(env_check)
+
   ui <- bslib::page_navbar(
     id    = "main_nav",
     title = "Xenium Panel Explorer",
@@ -39,7 +42,9 @@ xenium_panel_app <- function() {
       subcluster_error  = NULL,
       markers_error     = NULL,
       markers_cache     = list(),
-      markers_last_key  = NULL
+      markers_last_key  = NULL,
+      env_warnings      = env_check$warnings,
+      env_errors        = env_check$errors
     )
 
     # Whenever a fresh root run lands in xen_clustered, reset the

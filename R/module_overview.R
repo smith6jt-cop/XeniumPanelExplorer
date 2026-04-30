@@ -16,6 +16,7 @@ overview_ui <- function(id) {
                "that subpanel."),
       shiny::uiOutput(ns("counts"))
     ),
+    shiny::uiOutput(ns("env_card")),
     bslib::card(
       bslib::card_header("Genes per subpanel"),
       plotly::plotlyOutput(ns("nbar"), height = "320px")
@@ -29,6 +30,20 @@ overview_ui <- function(id) {
 
 overview_server <- function(id, panels, app_state) {
   shiny::moduleServer(id, function(input, output, session) {
+
+    output$env_card <- shiny::renderUI({
+      errs <- app_state$env_errors   %||% character()
+      warn <- app_state$env_warnings %||% character()
+      if (!length(errs) && !length(warn)) return(NULL)
+      bullets <- function(items) shiny::tags$ul(
+        lapply(items, function(s) shiny::tags$li(s)))
+      cls <- if (length(errs)) "alert alert-danger" else "alert alert-warning"
+      shiny::div(class = cls,
+        if (length(errs)) shiny::tagList(
+          shiny::strong("Environment errors"), bullets(errs)),
+        if (length(warn)) shiny::tagList(
+          shiny::strong("Environment warnings"), bullets(warn)))
+    })
 
     output$counts <- shiny::renderUI({
       p <- panels()

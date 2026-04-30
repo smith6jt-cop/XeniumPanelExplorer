@@ -64,7 +64,43 @@ behind a successful **Load Xenium**.
 
 ## Installation
 
-R 4.4 or newer is required. From the project root:
+R 4.4 or newer is required. The R *package* layer is reproducible
+through `renv`; the R *interpreter* itself is host-managed. If your
+workstation is set up by IT or carries multiple R series, the simplest
+way to land on a known-good R is `rig`.
+
+### Option A — `rig` (recommended for multi-R-version workstations)
+
+[`rig`](https://github.com/r-lib/rig) is a small R-installation
+manager (the R-world analogue of `nvm` / `pyenv`). It puts every R
+release side-by-side under `~/.local/share/R/` and lets you pick a
+default per-project.
+
+```bash
+# install rig (Ubuntu / Debian)
+curl -L https://rig.r-pkg.org/deb/rig.gpg \
+  | sudo tee /etc/apt/trusted.gpg.d/rig.gpg > /dev/null
+sudo curl -L -o /etc/apt/sources.list.d/rig.list https://rig.r-pkg.org/deb/rig.list
+sudo apt-get update
+sudo apt-get install r-rig
+
+# install + select the R version this project pins
+rig add 4.4.1
+rig default 4.4.1
+```
+
+`rig` doesn't replace any existing system R; the executable just
+becomes the first one on `$PATH` for new shells. Verify with
+`R --version` from a fresh terminal — you should see 4.4.1.
+
+### Option B — system R, however your host gives it to you
+
+If you already have R ≥ 4.4 from `apt`, conda, brew, or a HiPerGator
+module, skip `rig` entirely.
+
+### R packages
+
+From the project root, with R ≥ 4.4 on `$PATH`:
 
 ```r
 install.packages("renv")
@@ -81,6 +117,20 @@ records that source in the lockfile so `restore()` reproduces it.
 The first run takes ~10–15 minutes for source builds (Seurat, harmony,
 arrow, rhdf5, clustree and their transitive deps). Subsequent restores
 are seconds when the renv cache is warm.
+
+### Startup environment check
+
+The app runs `check_environment()` at session start and prints any
+issues to the terminal **and** to a banner card on the Overview tab:
+
+- R version below the pinned minimum (4.4),
+- any `Imports:` package that fails to load via `requireNamespace`,
+- a missing `data/panel_audit/subpanel_summary_v2.csv`,
+- (informational) `chromote` couldn't find a Chrome binary — only
+  matters for the `shinytest2` end-to-end test.
+
+These are warnings, not errors: the app keeps starting so a
+near-miss configuration is obvious rather than blocking.
 
 ---
 
