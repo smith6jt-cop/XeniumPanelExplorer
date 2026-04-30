@@ -65,11 +65,15 @@ clustree_ui <- function(id) {
     ),
     bslib::card(
       bslib::card_header("Resolution-tree"),
-      shiny::plotOutput(ns("tree"), height = "720px")
+      shinycssloaders::withSpinner(
+        shiny::plotOutput(ns("tree"), height = "720px"),
+        type = 8, color = "#3498db")
     ),
     bslib::card(
       bslib::card_header("Tree on UMAP"),
-      shiny::plotOutput(ns("overlay"), height = "640px")
+      shinycssloaders::withSpinner(
+        shiny::plotOutput(ns("overlay"), height = "640px"),
+        type = 8, color = "#3498db")
     ),
     bslib::card(
       bslib::card_header("Stability summary"),

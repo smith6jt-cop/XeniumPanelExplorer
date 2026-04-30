@@ -49,16 +49,22 @@ marker_ui <- function(id) {
       ),
       bslib::card(
         bslib::card_header("Ranked AUC — top-N per cluster"),
-        plotly::plotlyOutput(ns("rank_bar"), height = "520px")
+        shinycssloaders::withSpinner(
+          plotly::plotlyOutput(ns("rank_bar"), height = "520px"),
+          type = 8, color = "#3498db")
       )
     ),
     bslib::card(
       bslib::card_header("DotPlot — average expression × pct_in"),
-      shiny::plotOutput(ns("dotplot"), height = "560px")
+      shinycssloaders::withSpinner(
+        shiny::plotOutput(ns("dotplot"), height = "560px"),
+        type = 8, color = "#3498db")
     ),
     bslib::card(
       bslib::card_header("Heatmap — mean expression of top-N markers per cluster"),
-      shiny::plotOutput(ns("heatmap"), height = "640px")
+      shinycssloaders::withSpinner(
+        shiny::plotOutput(ns("heatmap"), height = "640px"),
+        type = 8, color = "#3498db")
     ),
     bslib::layout_columns(
       col_widths = c(6, 6),

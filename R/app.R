@@ -83,6 +83,24 @@ xenium_panel_app <- function() {
       bslib::nav_select(id = "main_nav", selected = target)
       app_state$nav_target <- NULL
     }, ignoreNULL = TRUE)
+
+    # Sweet-alert toasts. The status alert cards inside each module
+    # remain as the persistent record; this is a transient pop-up
+    # confirmation when an error transitions from NULL to a string.
+    .toast_error <- function(slot_name, title) {
+      shiny::observeEvent(app_state[[slot_name]], {
+        msg <- app_state[[slot_name]]
+        if (is.null(msg) || !nzchar(msg)) return()
+        shinyWidgets::sendSweetAlert(session = session,
+                                     title   = title,
+                                     text    = msg,
+                                     type    = "error",
+                                     btn_labels = "OK")
+      }, ignoreNULL = TRUE, ignoreInit = TRUE)
+    }
+    .toast_error("cluster_error",    "Cluster pipeline failed")
+    .toast_error("subcluster_error", "Subcluster pipeline failed")
+    .toast_error("markers_error",    "Marker computation failed")
   }
 
   shiny::shinyApp(ui, server)

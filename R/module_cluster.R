@@ -106,22 +106,30 @@ cluster_ui <- function(id) {
           bslib::card_header("UMAP — coloured by selected resolution"),
           shiny::sliderInput(ns("active_res"), "Resolution",
                              min = 0.1, max = 2.0, value = 0.5, step = 0.1),
-          plotly::plotlyOutput(ns("umap"), height = "520px")
+          shinycssloaders::withSpinner(
+            plotly::plotlyOutput(ns("umap"), height = "520px"),
+            type = 8, color = "#3498db")
         ),
         bslib::card(
           bslib::card_header("Cluster size"),
-          plotly::plotlyOutput(ns("cluster_bar"), height = "520px")
+          shinycssloaders::withSpinner(
+            plotly::plotlyOutput(ns("cluster_bar"), height = "520px"),
+            type = 8, color = "#3498db")
         )
       ),
       bslib::layout_columns(
         col_widths = c(7, 5),
         bslib::card(
           bslib::card_header("Spatial scatter (rasterized for n > 50k)"),
-          shiny::plotOutput(ns("spatial"), height = "520px")
+          shinycssloaders::withSpinner(
+            shiny::plotOutput(ns("spatial"), height = "520px"),
+            type = 8, color = "#3498db")
         ),
         bslib::card(
           bslib::card_header("Cluster × sample composition"),
-          plotly::plotlyOutput(ns("sample_stack"), height = "520px")
+          shinycssloaders::withSpinner(
+            plotly::plotlyOutput(ns("sample_stack"), height = "520px"),
+            type = 8, color = "#3498db")
         )
       ),
       bslib::accordion(
