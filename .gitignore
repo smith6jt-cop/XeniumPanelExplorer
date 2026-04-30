@@ -229,3 +229,6 @@ renv/staging/
 renv/python/
 renv/local/
 renv/sandbox/
+
+# Source archives — the unzipped CSVs live in data/panel_audit/
+/5KxeniumAnalysis.zip
