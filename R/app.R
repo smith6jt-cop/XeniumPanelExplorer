@@ -41,7 +41,7 @@ xenium_panel_app <- function() {
     overview_server("overview",          panels, app_state)
     panel_browser_server("panel_browser", panels, app_state)
     load_xenium_server("load_xenium",    panels, app_state)
-    panel_compare_server("panel_compare")
+    panel_compare_server("panel_compare", panels, app_state)
     cluster_server("cluster")
     subcluster_server("subcluster")
     marker_server("marker")
