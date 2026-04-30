@@ -1,0 +1,20 @@
+Package: xeniumPanelExplorer
+Type: Package
+Title: Interactive Browser and Reclusterer for Xenium Prime 5K Subpanels
+Version: 0.0.0.9000
+Authors@R: person("Smith", "JT", email = "smith6jt@ufl.edu",
+    role = c("aut", "cre"))
+Description: Shiny app for exploring 49 curated subpanels of the 10x Genomics
+    Xenium Prime 5K Human Pan Tissue and Pathways panel and re-clustering
+    user-loaded Xenium runs against any chosen subpanel.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Depends: R (>= 4.4)
+Imports:
+    shiny (>= 1.9.0),
+    bslib (>= 0.8.0)
+Suggests:
+    testthat (>= 3.0.0),
+    pkgload,
+    devtools
+Config/testthat/edition: 3

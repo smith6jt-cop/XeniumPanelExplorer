@@ -216,3 +216,16 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# R / renv
+.Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+*.qs2
+/cache/
+renv/library/
+renv/staging/
+renv/python/
+renv/local/
+renv/sandbox/
