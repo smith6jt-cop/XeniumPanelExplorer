@@ -34,8 +34,27 @@ xenium_panel_app <- function() {
       cluster_error     = NULL,
       cluster_jump_res  = NULL,
       compare_min_det   = 0,
-      compare_topn      = 10
+      compare_topn      = 10,
+      cluster_stack     = list(),
+      subcluster_error  = NULL
     )
+
+    # Whenever a fresh root run lands in xen_clustered, reset the
+    # subcluster stack so it begins again at the new root.
+    shiny::observeEvent(app_state$xen_clustered, {
+      x <- app_state$xen_clustered
+      if (is.null(x)) {
+        app_state$cluster_stack <- list()
+        return()
+      }
+      app_state$cluster_stack <- list(list(
+        obj            = x,
+        label          = "root",
+        parent_res     = NA_character_,
+        parent_cluster = NA_character_,
+        opts           = NULL
+      ))
+    }, ignoreNULL = FALSE)
 
     # Loaded once at session start. Wrap in a reactive so future M-x
     # modules can re-trigger a reload if the user adds files at runtime.
@@ -48,7 +67,7 @@ xenium_panel_app <- function() {
     load_xenium_server("load_xenium",    panels, app_state)
     panel_compare_server("panel_compare", panels, app_state)
     cluster_server("cluster", panels, app_state)
-    subcluster_server("subcluster")
+    subcluster_server("subcluster", panels, app_state)
     marker_server("marker")
     clustree_server("clustree", panels, app_state)
     export_server("export")
