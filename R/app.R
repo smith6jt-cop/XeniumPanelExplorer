@@ -29,7 +29,11 @@ xenium_panel_app <- function() {
       selected_subpanel = NULL,
       nav_target        = NULL,
       xen               = NULL,
-      xen_path          = NULL
+      xen_path          = NULL,
+      xen_clustered     = NULL,
+      cluster_error     = NULL,
+      compare_min_det   = 0,
+      compare_topn      = 10
     )
 
     # Loaded once at session start. Wrap in a reactive so future M-x
@@ -42,7 +46,7 @@ xenium_panel_app <- function() {
     panel_browser_server("panel_browser", panels, app_state)
     load_xenium_server("load_xenium",    panels, app_state)
     panel_compare_server("panel_compare", panels, app_state)
-    cluster_server("cluster")
+    cluster_server("cluster", panels, app_state)
     subcluster_server("subcluster")
     marker_server("marker")
     clustree_server("clustree")
