@@ -32,6 +32,7 @@ xenium_panel_app <- function() {
       xen_path          = NULL,
       xen_clustered     = NULL,
       cluster_error     = NULL,
+      cluster_jump_res  = NULL,
       compare_min_det   = 0,
       compare_topn      = 10
     )
@@ -49,7 +50,7 @@ xenium_panel_app <- function() {
     cluster_server("cluster", panels, app_state)
     subcluster_server("subcluster")
     marker_server("marker")
-    clustree_server("clustree")
+    clustree_server("clustree", panels, app_state)
     export_server("export")
 
     # Cross-tab routing: when a module sets app_state$nav_target, switch

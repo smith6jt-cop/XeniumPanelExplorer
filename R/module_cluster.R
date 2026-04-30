@@ -242,6 +242,17 @@ cluster_server <- function(id, panels, app_state) {
       }
     })
 
+    # Clustree tab can request the active resolution be set here.
+    shiny::observeEvent(app_state$cluster_jump_res, {
+      x <- app_state$xen_clustered
+      shiny::req(x)
+      avail <- cluster_resolution_values(x)
+      if (!length(avail)) return()
+      r <- avail[which.min(abs(avail - app_state$cluster_jump_res))]
+      shiny::updateSliderInput(session, "active_res", value = r)
+      app_state$cluster_jump_res <- NULL
+    }, ignoreNULL = TRUE)
+
     output$status <- shiny::renderUI({
       if (!is.null(app_state$cluster_error)) {
         return(shiny::div(class = "alert alert-danger",

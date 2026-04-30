@@ -26,6 +26,8 @@ Imports:
     shinyFiles (>= 0.9.3),
     waiter (>= 0.2.5),
     harmony (>= 1.2.0),
+    clustree (>= 0.5.1),
+    aricode,
     scales,
     ggrastr (>= 1.0.2),
     fs (>= 1.6.4),
