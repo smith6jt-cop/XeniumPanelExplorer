@@ -104,15 +104,19 @@ marker_server <- function(id, panels, app_state) {
         choices = rownames(x), server = TRUE)
     })
 
-    # Cache per (digest of active object's last_run_id + col)
-    markers_cache <- shiny::reactiveVal(list())
-
+    # Cache per (digest of active object's last_run_id + col). Lifted
+    # to app_state so the Export module can include the most-recent
+    # markers in the session report.
     markers_df <- shiny::eventReactive(input$compute, {
       x <- active_obj()
       shiny::req(x, input$group_col)
-      key <- paste(x@misc$last_run_id %||% "noid", input$group_col, sep = "::")
-      cache <- markers_cache()
-      if (!is.null(cache[[key]])) return(cache[[key]])
+      key   <- paste(x@misc$last_run_id %||% "noid", input$group_col,
+                     sep = "::")
+      cache <- app_state$markers_cache %||% list()
+      if (!is.null(cache[[key]])) {
+        app_state$markers_last_key <- key
+        return(cache[[key]])
+      }
       m <- tryCatch(compute_markers(x, input$group_col),
                     error = function(e) e)
       if (inherits(m, "error")) {
@@ -120,7 +124,9 @@ marker_server <- function(id, panels, app_state) {
         return(NULL)
       }
       app_state$markers_error <- NULL
-      cache[[key]] <- m; markers_cache(cache)
+      cache[[key]] <- m
+      app_state$markers_cache    <- cache
+      app_state$markers_last_key <- key
       m
     }, ignoreInit = TRUE)
 

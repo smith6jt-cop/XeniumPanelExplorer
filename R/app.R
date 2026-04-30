@@ -37,7 +37,9 @@ xenium_panel_app <- function() {
       compare_topn      = 10,
       cluster_stack     = list(),
       subcluster_error  = NULL,
-      markers_error     = NULL
+      markers_error     = NULL,
+      markers_cache     = list(),
+      markers_last_key  = NULL
     )
 
     # Whenever a fresh root run lands in xen_clustered, reset the
@@ -71,7 +73,7 @@ xenium_panel_app <- function() {
     subcluster_server("subcluster", panels, app_state)
     marker_server("marker", panels, app_state)
     clustree_server("clustree", panels, app_state)
-    export_server("export")
+    export_server("export", panels, app_state)
 
     # Cross-tab routing: when a module sets app_state$nav_target, switch
     # the navbar to that panel.
