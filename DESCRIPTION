@@ -12,7 +12,11 @@ Encoding: UTF-8
 Depends: R (>= 4.4)
 Imports:
     shiny (>= 1.9.0),
-    bslib (>= 0.8.0)
+    bslib (>= 0.8.0),
+    DT (>= 0.33),
+    plotly (>= 4.10.4),
+    data.table (>= 1.16.0),
+    ggplot2 (>= 3.5.0)
 Suggests:
     testthat (>= 3.0.0),
     pkgload,
