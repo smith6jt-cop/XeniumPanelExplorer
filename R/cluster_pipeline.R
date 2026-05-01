@@ -39,6 +39,13 @@ default_cluster_opts <- function() {
   modifyList(default_cluster_opts(), opts %||% list())
 }
 
+# Forward an increment to the user-supplied progress handler, or no-op.
+.tick <- function(progress, amount, message, detail = NULL) {
+  if (is.function(progress)) {
+    progress(amount = amount, message = message, detail = detail)
+  }
+}
+
 #' Build the variable-feature set used by RunPCA.
 #'
 #' Union of `subpanels` ∪ `extra_genes`, intersected with the loaded data;
@@ -94,14 +101,19 @@ default_cluster_opts <- function() {
 #' @param xen a Seurat object (typically `app_state$xen`).
 #' @param panels output of [load_panels()]; supplies subpanel gene sets.
 #' @param opts named list, see [default_cluster_opts()].
+#' @param progress optional `function(amount, message, detail = NULL)` invoked
+#'   at each major step. Drive this from `shiny::withProgress` /
+#'   `shiny::incProgress` to stream step-level progress to the UI; pass `NULL`
+#'   (the default) to run silently.
 #' @return a new Seurat object.
-run_cluster_pipeline <- function(xen, panels, opts = list()) {
+run_cluster_pipeline <- function(xen, panels, opts = list(), progress = NULL) {
   if (!inherits(xen, "Seurat")) stop("xen must be a Seurat object")
   opts <- .merge_opts(opts)
 
   set.seed(opts$seed)
 
   # 1. Cell + feature subset
+  .tick(progress, 0.02, "Subsetting cells and features")
   keep_cells <- .resolve_cells(xen, opts)
   if (!length(keep_cells)) stop("Cell filter removed all cells.")
   obj <- xen[, keep_cells]
@@ -123,11 +135,12 @@ run_cluster_pipeline <- function(xen, panels, opts = list()) {
       norm <- "LogNormalize"
     }
   }
+  .tick(progress, 0.10, "Normalizing", detail = norm)
   obj <- switch(norm,
     LogNormalize = Seurat::NormalizeData(obj, normalization.method = "LogNormalize",
                                          verbose = FALSE),
     SCT          = Seurat::SCTransform(obj, assay = used_assay,
-                                       verbose = FALSE,
+                                       verbose = TRUE,
                                        return.only.var.genes = FALSE),
     skip         = obj,
     stop("unknown norm_method: ", norm)
@@ -138,12 +151,15 @@ run_cluster_pipeline <- function(xen, panels, opts = list()) {
   # 3. Variable features + scaling
   SeuratObject::VariableFeatures(obj) <- feats
   if (isTRUE(opts$do_scale) && !identical(norm, "SCT")) {
+    .tick(progress, 0.05, "Scaling")
     obj <- Seurat::ScaleData(obj, features = feats, verbose = FALSE)
   }
 
   # 4. PCA on the variable feature set
+  .tick(progress, 0.10, "Running PCA",
+        detail = sprintf("%d PCs over %d features", npcs_use, length(feats)))
   obj <- Seurat::RunPCA(obj, features = feats, npcs = npcs_use,
-                        verbose = FALSE, seed.use = opts$seed)
+                        verbose = TRUE, seed.use = opts$seed)
 
   # 5. Optional Harmony batch correction
   reduction_for_neighbors <- "pca"
@@ -158,20 +174,28 @@ run_cluster_pipeline <- function(xen, panels, opts = list()) {
         "batch_var '%s' has only one level; skipping Harmony.",
         opts$batch_var))
     } else {
+      .tick(progress, 0.08, "Harmony batch correction",
+            detail = sprintf("group.by = %s, theta = %.1f",
+                             opts$batch_var, opts$harmony_theta))
       obj <- harmony::RunHarmony(obj,
                                  group.by.vars = opts$batch_var,
                                  theta         = opts$harmony_theta,
-                                 verbose       = FALSE)
+                                 verbose       = TRUE)
       reduction_for_neighbors <- "harmony"
     }
   }
 
   # 6. Neighbors + UMAP
+  .tick(progress, 0.05, "Finding neighbors",
+        detail = sprintf("k.param = %d", opts$k_param))
   obj <- Seurat::FindNeighbors(obj,
                                reduction = reduction_for_neighbors,
                                dims      = seq_len(npcs_use),
                                k.param   = opts$k_param,
-                               verbose   = FALSE)
+                               verbose   = TRUE)
+  .tick(progress, 0.15, "Computing UMAP",
+        detail = sprintf("n.neighbors = %d, min.dist = %.2f",
+                         opts$n_neighbors, opts$min_dist))
   obj <- Seurat::RunUMAP(obj,
                          reduction   = reduction_for_neighbors,
                          dims        = seq_len(npcs_use),
@@ -179,7 +203,7 @@ run_cluster_pipeline <- function(xen, panels, opts = list()) {
                          n.neighbors = opts$n_neighbors,
                          metric      = opts$metric,
                          seed.use    = opts$seed,
-                         verbose     = FALSE)
+                         verbose     = TRUE)
 
   # 7. Resolution sweep
   algo_id <- 1L  # Louvain
@@ -191,11 +215,23 @@ run_cluster_pipeline <- function(xen, panels, opts = list()) {
     }
   }
 
-  for (r in opts$resolutions) {
+  used_so_far <- 0.02 + 0.10 +
+    (if (isTRUE(opts$do_scale) && !identical(norm, "SCT")) 0.05 else 0) +
+    0.10 +
+    (if (identical(reduction_for_neighbors, "harmony")) 0.08 else 0) +
+    0.05 + 0.15
+  per_res <- max(0, (1 - used_so_far)) / max(1L, length(opts$resolutions))
+  algo_label <- if (algo_id == 4L) "Leiden" else "Louvain"
+
+  for (i in seq_along(opts$resolutions)) {
+    r <- opts$resolutions[[i]]
+    .tick(progress, per_res, "Clustering",
+          detail = sprintf("%s — resolution %.2f (%d/%d)",
+                           algo_label, r, i, length(opts$resolutions)))
     obj <- Seurat::FindClusters(obj,
                                 resolution = r,
                                 algorithm  = algo_id,
-                                verbose    = FALSE,
+                                verbose    = TRUE,
                                 random.seed = opts$seed)
     col <- sprintf("seurat_clusters_res_%g", r)
     obj@meta.data[[col]] <- obj@meta.data[["seurat_clusters"]]

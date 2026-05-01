@@ -195,11 +195,19 @@ cluster_server <- function(id, panels, app_state) {
     })
 
     # --- Run pipeline on click ---------------------------------------
-    waiter::useWaiter()
-
     shiny::observeEvent(input$run, {
+      if (is.null(app_state$xen)) {
+        shinyWidgets::sendSweetAlert(
+          session = session,
+          title   = "No dataset loaded",
+          text    = paste("Load a Xenium run on the 'Load Xenium' tab",
+                          "before running the cluster pipeline."),
+          type    = "info",
+          btn_labels = "OK"
+        )
+        return()
+      }
       x <- app_state$xen
-      shiny::req(x)
       opts <- list(
         subpanels         = input$subpanels         %||% character(),
         extra_genes       = input$extra_genes       %||% character(),
@@ -226,14 +234,24 @@ cluster_server <- function(id, panels, app_state) {
                                 by = input$res_step),
         seed              = as.integer(input$seed)
       )
-      w <- waiter::Waiter$new(
-        html = shiny::tagList(waiter::spin_dots(),
-                              shiny::h4("Running cluster pipeline…")),
-        color = "rgba(0,0,0,0.55)"
+      out <- shiny::withProgress(
+        message = "Cluster pipeline",
+        detail  = "starting…",
+        value   = 0,
+        expr = {
+          tryCatch(
+            run_cluster_pipeline(
+              x, panels(), opts,
+              progress = function(amount, message, detail = NULL) {
+                shiny::incProgress(amount = amount,
+                                   message = message,
+                                   detail = detail)
+              }
+            ),
+            error = function(e) e
+          )
+        }
       )
-      w$show(); on.exit(w$hide(), add = TRUE)
-      out <- tryCatch(run_cluster_pipeline(x, panels(), opts),
-                      error = function(e) e)
       if (inherits(out, "error")) {
         app_state$cluster_error <- conditionMessage(out)
         return()
