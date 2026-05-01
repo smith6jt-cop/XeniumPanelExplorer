@@ -26,6 +26,14 @@ load_xenium_ui <- function(id) {
       shiny::actionButton(ns("load_manual"), "Load from path",
                           class = "btn-primary"),
       shiny::hr(),
+      shiny::h5("Demo mode"),
+      shiny::p(shiny::em("No data on hand? Load a small synthetic ",
+                         "dataset (1.5k cells × 800 genes sampled from ",
+                         "the panel) to try every tab end-to-end.")),
+      shiny::actionButton(ns("load_demo"), "Load demo dataset",
+                          class = "btn-secondary",
+                          icon  = shiny::icon("flask")),
+      shiny::hr(),
       shiny::checkboxInput(ns("force_refresh"),
                            "Bypass cache (force re-ingest)",
                            value = FALSE),
@@ -75,23 +83,29 @@ load_xenium_server <- function(id, panels, app_state) {
       p <- input$manual_path
       if (!is.null(p) && nzchar(p)) chosen_path(p)
     })
+    shiny::observeEvent(input$load_demo, {
+      chosen_path(demo_path_sentinel())
+    })
 
     waiter::useWaiter()
 
     xen_load <- shiny::reactive({
       p <- chosen_path()
       shiny::req(p)
+      is_demo <- identical(p, demo_path_sentinel())
       w <- waiter::Waiter$new(
         html = shiny::tagList(
           waiter::spin_dots(),
-          shiny::h4("Loading Xenium dataset…")
+          shiny::h4(if (is_demo) "Building demo dataset…"
+                    else "Loading Xenium dataset…")
         ),
         color = "rgba(0,0,0,0.55)"
       )
       w$show()
       on.exit(w$hide(), add = TRUE)
       tryCatch(
-        load_xenium(p, refresh = isTRUE(input$force_refresh)),
+        if (is_demo) load_demo_xenium(panels())
+        else load_xenium(p, refresh = isTRUE(input$force_refresh)),
         error = function(e) structure(list(error = conditionMessage(e)),
                                        class = "load_xenium_error")
       )
@@ -115,8 +129,16 @@ load_xenium_server <- function(id, panels, app_state) {
       }
       shiny::req(out)
       cache_info <- attr(out, "load_xenium_cache")
+      is_demo <- identical(chosen_path(), demo_path_sentinel())
+      path_line <- if (is_demo) {
+        shiny::p(shiny::strong("Source: "),
+                 shiny::span(class = "badge bg-warning text-dark",
+                             "Demo (synthetic)"))
+      } else {
+        shiny::p(shiny::strong("Path: "), shiny::code(chosen_path()))
+      }
       shiny::tagList(
-        shiny::p(shiny::strong("Path: "), shiny::code(chosen_path())),
+        path_line,
         shiny::p(shiny::strong("Class: "), class(out)[1]),
         shiny::p(shiny::strong("Cells: "),  ncol(out)),
         shiny::p(shiny::strong("Genes: "),  nrow(out)),

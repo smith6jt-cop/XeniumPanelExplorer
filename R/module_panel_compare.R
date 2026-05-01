@@ -24,21 +24,24 @@ panel_compare_ui <- function(id) {
       shiny::p(shiny::em("Filter state is preserved in app_state ",
                          "so other modules can read it."))
     ),
-    bslib::card(
-      bslib::card_header("Coverage by subpanel"),
-      shiny::uiOutput(ns("nodata_msg")),
-      DT::DTOutput(ns("coverage"))
-    ),
-    bslib::card(
-      bslib::card_header("Fraction of subpanel genes passing the cutoff"),
-      plotly::plotlyOutput(ns("frac_bar"), height = "420px")
+    bslib::layout_columns(
+      col_widths = c(6, 6),
+      bslib::card(
+        bslib::card_header("Coverage by subpanel"),
+        shiny::uiOutput(ns("nodata_msg")),
+        DT::DTOutput(ns("coverage"))
+      ),
+      bslib::card(
+        bslib::card_header("Fraction of subpanel genes passing the cutoff"),
+        plotly::plotlyOutput(ns("frac_bar"), height = "420px")
+      )
     ),
     bslib::card(
       bslib::card_header("Top-N genes per subpanel — detection %"),
       shiny::p("Rows are subpanels; columns are the top-N genes by ",
                "detection % in the loaded dataset. White cells = gene ",
                "below cutoff or absent from data."),
-      shiny::plotOutput(ns("heatmap"), height = "720px")
+      shiny::plotOutput(ns("heatmap"), height = "1100px")
     )
   )
 }
@@ -128,7 +131,7 @@ panel_compare_server <- function(id, panels, app_state) {
                                    fill = detection_pct)) +
         ggplot2::geom_tile(colour = "white", linewidth = 0.2) +
         ggplot2::geom_text(ggplot2::aes(label = gene),
-                           size = 2.6, colour = "black") +
+                           size = 4, colour = "black") +
         ggplot2::scale_fill_viridis_c(option = "C",
                                       name = "detection %",
                                       limits = c(0, 100)) +
@@ -137,7 +140,7 @@ panel_compare_server <- function(id, panels, app_state) {
         ggplot2::labs(x = sprintf("rank within subpanel (top-%d)",
                                   input$topn),
                       y = NULL) +
-        ggplot2::theme_minimal(base_size = 11) +
+        ggplot2::theme_minimal(base_size = 16) +
         ggplot2::theme(panel.grid = ggplot2::element_blank())
     })
   })
