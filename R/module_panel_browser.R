@@ -18,7 +18,25 @@ panel_browser_ui <- function(id) {
                            "Hide genes with exclude_recommended = yes",
                            value = FALSE),
       shiny::p(shiny::strong("Tip: "),
-               "select two panels to see set-overlap stats below the table.")
+               "select two panels to see set-overlap stats below the table."),
+      bslib::accordion(
+        open = FALSE,
+        bslib::accordion_panel(
+          "Custom panel source",
+          shiny::p(shiny::em(
+            "Upload a CSV to replace the T1D-GWAS custom panel for this ",
+            "session. A `gene` column is required; missing canonical ",
+            "columns are filled in from the original T1D-GWAS panel and ",
+            "the xenium5k reference for any matching genes.")),
+          shiny::fileInput(ns("custom_upload"),
+                           "Replace custom panel CSV",
+                           accept = c(".csv", "text/csv")),
+          shiny::actionButton(ns("custom_reset"),
+                              "Reset to default",
+                              class = "btn-sm btn-outline-secondary"),
+          shiny::uiOutput(ns("custom_status"))
+        )
+      )
     ),
     bslib::card(
       bslib::card_header(shiny::textOutput(ns("primary_caption"),
@@ -49,30 +67,116 @@ shinyWidgets_or_shiny_selectize <- function(id, label, choices, multiple) {
                                        placeholder = "(none)"))
 }
 
-panel_browser_server <- function(id, panels, app_state) {
+panel_browser_server <- function(id, panels, panels_default, app_state) {
   shiny::moduleServer(id, function(input, output, session) {
 
+    # Handle a user upload of a replacement custom-panel CSV. Enrichment
+    # always uses the on-disk defaults (panels_default()), not the
+    # currently-active override, so re-uploads are idempotent.
+    shiny::observeEvent(input$custom_upload, {
+      f <- input$custom_upload
+      if (is.null(f)) return()
+      tryCatch({
+        result <- upload_custom_panel(
+          csv_path    = f$datapath,
+          panels      = panels_default(),
+          source_name = f$name
+        )
+        app_state$custom_panel_override <- result$df
+        app_state$custom_panel_status   <- result
+      }, error = function(e) {
+        app_state$custom_panel_override <- NULL
+        app_state$custom_panel_status   <- NULL
+        shinyWidgets::sendSweetAlert(
+          session = session,
+          title   = "Custom panel upload failed",
+          text    = conditionMessage(e),
+          type    = "error",
+          btn_labels = "OK"
+        )
+      })
+    }, ignoreNULL = TRUE)
+
+    shiny::observeEvent(input$custom_reset, {
+      app_state$custom_panel_override <- NULL
+      app_state$custom_panel_status   <- NULL
+      # Clear the fileInput so re-uploading the same file re-fires.
+      shiny::updateTextInput(session, "custom_upload", value = "")
+    }, ignoreInit = TRUE)
+
+    output$custom_status <- shiny::renderUI({
+      st <- app_state$custom_panel_status
+      if (is.null(st)) {
+        n <- nrow(panels_default()$custom %||% data.frame())
+        return(shiny::tags$p(shiny::tags$small(
+          shiny::strong("Custom panel: "), "default ",
+          sprintf("(%d genes)", n))))
+      }
+      shiny::tags$div(
+        shiny::tags$p(shiny::tags$small(
+          shiny::strong("Custom panel: "), "uploaded ",
+          shiny::tags$code(st$source_name),
+          sprintf(" (%d genes)", st$n_genes))),
+        shiny::tags$ul(
+          class = "small mb-0",
+          shiny::tags$li(sprintf("%d enriched from T1D-GWAS",
+                                 st$n_enriched_from_custom)),
+          shiny::tags$li(sprintf("%d enriched from xenium5k",
+                                 st$n_enriched_from_5k)),
+          shiny::tags$li(sprintf("%d unmatched (no reference data)",
+                                 st$n_unmatched))
+        )
+      )
+    })
+
+    # Values used for lookup in `get_panel_df()`. Stable across uploads.
     panel_choices <- shiny::reactive({
       p <- panels()
       c(
-        # the 49 subpanels in numeric order, then 99 / 99c / 99d
         sort(p$meta$subpanel_keys),
-        # ancillaries
         "custom_T1D_GWAS_panel",
         "xenium5k_in_audit"
       )
     })
 
-    shiny::observe({
-      shiny::updateSelectizeInput(session, "panel",
-                                  choices = panel_choices(),
-                                  server  = TRUE,
-                                  selected = panel_choices()[1])
-      shiny::updateSelectizeInput(session, "compare",
-                                  choices = c("(none)", panel_choices()),
-                                  server  = TRUE,
-                                  selected = "(none)")
+    # Display labels — when an override is active the custom-panel slot
+    # shows the uploaded filename stem (matches every other UI surface).
+    panel_choices_labeled <- shiny::reactive({
+      vals <- panel_choices()
+      labels <- vals
+      st <- app_state$custom_panel_status
+      if (!is.null(st)) {
+        labels[vals == "custom_T1D_GWAS_panel"] <- custom_panel_label(st)
+      }
+      stats::setNames(vals, labels)
     })
+
+    shiny::observe({
+      ch <- panel_choices_labeled()
+      cur_panel   <- shiny::isolate(input$panel)
+      cur_compare <- shiny::isolate(input$compare)
+      sel_panel <- if (!is.null(cur_panel) && cur_panel %in% ch) cur_panel
+                   else unname(ch)[1]
+      sel_compare <- if (!is.null(cur_compare) &&
+                         (cur_compare %in% ch || cur_compare == "(none)"))
+                       cur_compare else "(none)"
+      shiny::updateSelectizeInput(session, "panel",
+                                  choices = ch,
+                                  server  = TRUE,
+                                  selected = sel_panel)
+      shiny::updateSelectizeInput(session, "compare",
+                                  choices = c("(none)" = "(none)", ch),
+                                  server  = TRUE,
+                                  selected = sel_compare)
+    })
+
+    # Registered after the choices observer so it runs LAST in the flush
+    # cycle — surfaces the just-uploaded panel in the dropdown without
+    # being clobbered by the choices observer's selected-value default.
+    shiny::observeEvent(app_state$custom_panel_status, {
+      shiny::updateSelectizeInput(session, "panel",
+                                  selected = "custom_T1D_GWAS_panel")
+    }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     # External nav from Overview: a subpanel key arrives via app_state
     shiny::observeEvent(app_state$selected_subpanel, {
@@ -109,7 +213,10 @@ panel_browser_server <- function(id, panels, app_state) {
     output$primary_caption <- shiny::renderText({
       df <- primary_df()
       if (is.null(df)) return("Select a panel.")
-      sprintf("%s — %d genes", input$panel, nrow(df))
+      sprintf("%s — %d genes",
+              panel_display_label(input$panel,
+                                  app_state$custom_panel_status),
+              nrow(df))
     })
 
     output$genes <- DT::renderDT({
@@ -168,19 +275,20 @@ panel_browser_server <- function(id, panels, app_state) {
       ga <- a$gene; gb <- b$gene
       both <- intersect(ga, gb)
       a_only <- setdiff(ga, gb); b_only <- setdiff(gb, ga)
+      st <- app_state$custom_panel_status
+      lbl_a <- panel_display_label(input$panel,   st)
+      lbl_b <- panel_display_label(input$compare, st)
       shiny::tagList(
         shiny::tags$table(
           class = "table table-sm",
           shiny::tags$thead(shiny::tags$tr(
             shiny::tags$th("Set"), shiny::tags$th("Genes"))),
           shiny::tags$tbody(
-            shiny::tags$tr(shiny::tags$td(input$panel,
-                                          " only"),
+            shiny::tags$tr(shiny::tags$td(lbl_a, " only"),
                            shiny::tags$td(length(a_only))),
             shiny::tags$tr(shiny::tags$td("Both"),
                            shiny::tags$td(length(both))),
-            shiny::tags$tr(shiny::tags$td(input$compare,
-                                          " only"),
+            shiny::tags$tr(shiny::tags$td(lbl_b, " only"),
                            shiny::tags$td(length(b_only))),
             shiny::tags$tr(shiny::tags$td(shiny::strong("Union")),
                            shiny::tags$td(shiny::strong(length(union(ga, gb))))))

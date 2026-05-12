@@ -29,22 +29,26 @@ xenium_panel_app <- function() {
     # (filename stem), e.g. "01_pancreas_endocrine". `nav_target` is the
     # `value` of the nav_panel to switch to.
     app_state <- shiny::reactiveValues(
-      selected_subpanel = NULL,
-      nav_target        = NULL,
-      xen               = NULL,
-      xen_path          = NULL,
-      xen_clustered     = NULL,
-      cluster_error     = NULL,
-      cluster_jump_res  = NULL,
-      compare_min_det   = 0,
-      compare_topn      = 10,
-      cluster_stack     = list(),
-      subcluster_error  = NULL,
-      markers_error     = NULL,
-      markers_cache     = list(),
-      markers_last_key  = NULL,
-      env_warnings      = env_check$warnings,
-      env_errors        = env_check$errors
+      selected_subpanel     = NULL,
+      nav_target            = NULL,
+      xen                   = NULL,
+      xen_path              = NULL,
+      xen_clustered         = NULL,
+      cluster_error         = NULL,
+      cluster_jump_res      = NULL,
+      compare_min_det       = 0,
+      compare_topn          = 10,
+      cluster_stack         = list(),
+      subcluster_error      = NULL,
+      markers_error         = NULL,
+      markers_cache         = list(),
+      markers_last_key      = NULL,
+      env_warnings          = env_check$warnings,
+      env_errors            = env_check$errors,
+      # Session-scoped override of `panels$custom` (the T1D-GWAS panel).
+      # When non-NULL, spliced in by the `panels` reactive below.
+      custom_panel_override = NULL,
+      custom_panel_status   = NULL
     )
 
     # Whenever a fresh root run lands in xen_clustered, reset the
@@ -66,12 +70,20 @@ xenium_panel_app <- function() {
 
     # Loaded once at session start. Wrap in a reactive so future M-x
     # modules can re-trigger a reload if the user adds files at runtime.
-    panels <- shiny::reactive({
+    panels_default <- shiny::reactive({
       load_panels()
+    })
+    # `panels` splices any user-uploaded custom-panel override into
+    # `panels$custom` so every downstream module sees it.
+    panels <- shiny::reactive({
+      base <- panels_default()
+      ov   <- app_state$custom_panel_override
+      if (!is.null(ov)) base$custom <- ov
+      base
     })
 
     overview_server("overview",          panels, app_state)
-    panel_browser_server("panel_browser", panels, app_state)
+    panel_browser_server("panel_browser", panels, panels_default, app_state)
     load_xenium_server("load_xenium",    panels, app_state)
     panel_compare_server("panel_compare", panels, app_state)
     cluster_server("cluster", panels, app_state)

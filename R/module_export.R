@@ -111,7 +111,9 @@ export_server <- function(id, panels, app_state) {
       filename = function() sprintf("session_report_%s.html",
                                      format(Sys.time(), "%Y%m%dT%H%M%S")),
       content  = function(file) {
-        render_session_report(file, panels(), app_state)
+        render_session_report(
+          file, panels(), app_state,
+          custom_label = custom_panel_label(app_state$custom_panel_status))
       })
   })
 }

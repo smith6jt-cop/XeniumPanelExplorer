@@ -47,6 +47,7 @@ overview_server <- function(id, panels, app_state) {
 
     output$counts <- shiny::renderUI({
       p <- panels()
+      custom_lbl <- custom_panel_label(app_state$custom_panel_status)
       shiny::tagList(
         shiny::p(shiny::strong("Subpanels indexed: "),
                  nrow(p$summary)),
@@ -54,7 +55,7 @@ overview_server <- function(id, panels, app_state) {
                  length(p$subpanels)),
         shiny::p(shiny::strong("5K-shared genes: "),
                  nrow(p$xenium5k)),
-        shiny::p(shiny::strong("Custom T1D-GWAS genes: "),
+        shiny::p(shiny::strong(sprintf("%s genes: ", custom_lbl)),
                  nrow(p$custom))
       )
     })

@@ -50,6 +50,16 @@ load_xenium_ui <- function(id) {
       shiny::uiOutput(ns("validation"))
     ),
     bslib::card(
+      bslib::card_header("Custom panel coverage in loaded data"),
+      shiny::uiOutput(ns("custom_coverage_summary")),
+      shiny::div(style = "margin: 6px 0 10px;",
+                 shiny::downloadButton(
+                   ns("dl_missing"),
+                   "Download missing genes (CSV)",
+                   class = "btn-sm btn-outline-secondary")),
+      DT::DTOutput(ns("missing_table"))
+    ),
+    bslib::card(
       bslib::card_header("Spatial preview"),
       shiny::p("Rasterized scatter of cell centroids ",
                "(", shiny::code("x_centroid"), " vs ",
@@ -158,8 +168,79 @@ load_xenium_server <- function(id, panels, app_state) {
              else if (rep$pct_reference_covered >= 0.5) "alert-warning"
              else "alert-info"
       shiny::div(class = paste("alert", cls),
-                 panel_validate_summary(rep))
+                 panel_validate_summary(
+                   rep,
+                   custom_label = custom_panel_label(
+                     app_state$custom_panel_status)))
     })
+
+    # Custom-panel rows whose `gene` is not in the loaded dataset.
+    # `panels()$custom` is the (possibly overridden) uploaded panel, so
+    # this works for both the default T1D-GWAS panel and any upload.
+    custom_coverage <- shiny::reactive({
+      shiny::req(app_state$xen)
+      cust <- panels()$custom
+      if (is.null(cust) || nrow(cust) == 0L) return(NULL)
+      data_genes <- rownames(app_state$xen)
+      is_present <- cust$gene %in% data_genes
+      list(
+        label      = custom_panel_label(app_state$custom_panel_status),
+        total      = nrow(cust),
+        n_present  = sum(is_present),
+        n_missing  = sum(!is_present),
+        missing_df = cust[!is_present, , drop = FALSE]
+      )
+    })
+
+    output$custom_coverage_summary <- shiny::renderUI({
+      if (is.null(app_state$xen)) {
+        return(shiny::p(shiny::em(
+          "Load a Xenium dataset to see custom-panel coverage.")))
+      }
+      cc <- custom_coverage()
+      if (is.null(cc)) {
+        return(shiny::p(shiny::em("No custom-panel data available.")))
+      }
+      cls <- if (cc$n_missing == 0L)               "alert-success"
+             else if (cc$n_missing / cc$total <= 0.1) "alert-info"
+             else                                     "alert-warning"
+      shiny::div(
+        class = paste("alert", cls),
+        sprintf(
+          "%d of %d genes from %s are present in the loaded dataset (%d missing).",
+          cc$n_present, cc$total, cc$label, cc$n_missing))
+    })
+
+    output$missing_table <- DT::renderDT({
+      shiny::req(app_state$xen)
+      cc <- custom_coverage()
+      shiny::req(cc)
+      df <- cc$missing_df
+      if (nrow(df) == 0L) {
+        return(DT::datatable(
+          data.frame(message = "All custom-panel genes are present in the loaded data."),
+          rownames = FALSE,
+          options  = list(dom = "t"),
+          class    = "stripe compact"))
+      }
+      DT::datatable(
+        df, rownames = FALSE, filter = "top",
+        options = list(pageLength = 25, scrollX = TRUE),
+        class   = "stripe hover compact nowrap")
+    })
+
+    output$dl_missing <- shiny::downloadHandler(
+      filename = function() {
+        lbl <- if (is.null(app_state$xen)) "custom"
+               else custom_panel_label(app_state$custom_panel_status)
+        sprintf("missing_in_data_%s_%s.csv",
+                lbl, format(Sys.time(), "%Y%m%dT%H%M%S"))
+      },
+      content = function(file) {
+        cc <- custom_coverage()
+        df <- if (is.null(cc)) data.frame() else cc$missing_df
+        utils::write.csv(df, file, row.names = FALSE)
+      })
 
     output$spatial <- plotly::renderPlotly({
       out <- xen_load()

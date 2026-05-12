@@ -67,8 +67,11 @@ panel_compare_server <- function(id, panels, app_state) {
 
     coverage_df <- shiny::reactive({
       shiny::req(have_xen())
-      compute_subpanel_coverage(panels(), app_state$xen,
-                                min_detection_pct = input$min_det)
+      compute_subpanel_coverage(
+        panels(), app_state$xen,
+        min_detection_pct = input$min_det,
+        custom_label      = custom_panel_label(app_state$custom_panel_status)
+      )
     })
 
     output$coverage <- DT::renderDT({

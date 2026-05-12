@@ -46,7 +46,8 @@ build_markers_csv <- function(markers_cache) {
 #' Sections are added only for state that exists (loaded dataset,
 #' clustered object, subcluster stack, marker tables).
 render_session_report <- function(file, panels, app_state,
-                                  title = "Xenium Panel Explorer — session report") {
+                                  title = "Xenium Panel Explorer — session report",
+                                  custom_label = "custom_T1D_GWAS_panel") {
   ts <- format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
 
   card <- function(title, ...) {
@@ -89,7 +90,7 @@ render_session_report <- function(file, panels, app_state,
     kv("Generated",       ts,
        "Subpanels",       nrow(s),
        "5K-shared genes", nrow(panels$xenium5k),
-       "Custom-100 genes",nrow(panels$custom),
+       sprintf("%s genes", custom_label), nrow(panels$custom),
        "Excluded genes",  nrow(panels$excluded)),
     htmltools::p(htmltools::strong("Top by gene count: ")),
     df_to_html(s[order(-s$n_genes), c("subpanel","n_genes","description")],
@@ -103,7 +104,8 @@ render_session_report <- function(file, panels, app_state,
       kv("Path",     app_state$xen_path %||% "(unknown)",
          "Cells",    ncol(app_state$xen),
          "Genes",    nrow(app_state$xen),
-         "Validation", panel_validate_summary(rep))))
+         "Validation", panel_validate_summary(rep,
+                                              custom_label = custom_label))))
   }
 
   # 3. Cluster pipeline run log

@@ -31,17 +31,20 @@ per_gene_mean_expr <- function(xen) {
 #' @param xen Seurat object loaded via [load_xenium()]
 #' @param min_detection_pct numeric ≥ 0, the per-gene detection cutoff
 #'        applied to the loaded data
-compute_subpanel_coverage <- function(panels, xen, min_detection_pct = 0) {
+compute_subpanel_coverage <- function(panels, xen, min_detection_pct = 0,
+                                      custom_label = "custom_T1D_GWAS_panel") {
   det <- per_gene_detection_pct(xen)
   mu  <- per_gene_mean_expr(xen)
   data_genes <- names(det)
 
+  custom_block <- stats::setNames(
+    list(data.frame(gene = panels$custom$gene)),
+    custom_label
+  )
   groups <- c(
     panels$subpanels,
-    list(
-      custom_T1D_GWAS_panel = data.frame(gene = panels$custom$gene),
-      xenium5k_in_audit     = data.frame(gene = panels$xenium5k$gene)
-    )
+    custom_block,
+    list(xenium5k_in_audit = data.frame(gene = panels$xenium5k$gene))
   )
 
   rows <- lapply(names(groups), function(nm) {

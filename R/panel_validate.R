@@ -39,14 +39,17 @@ panel_validate <- function(genes, panels) {
 }
 
 #' Render a one-paragraph human-readable summary of [panel_validate()].
-panel_validate_summary <- function(rep) {
-  glue_prefix <- function(...) paste0(...)
+#'
+#' @param custom_label Display label for the custom-panel slot in the
+#'   reference-union phrase. Pass the uploaded-panel stem to keep the
+#'   summary consistent with the rest of the UI.
+panel_validate_summary <- function(rep, custom_label = "custom-100") {
   msg <- sprintf(
     paste0(
-      "Loaded dataset: %d genes. Reference (xenium5k_in_audit ∪ custom-100): %d genes. ",
+      "Loaded dataset: %d genes. Reference (xenium5k_in_audit ∪ %s): %d genes. ",
       "Intersection: %d (%.1f%% of reference). Missing from data: %d. ",
       "Extra in data (not in reference): %d."),
-    rep$n_data, rep$n_reference, rep$n_intersection,
+    rep$n_data, custom_label, rep$n_reference, rep$n_intersection,
     100 * rep$pct_reference_covered,
     rep$n_missing_from_data, rep$n_extra_in_data
   )
