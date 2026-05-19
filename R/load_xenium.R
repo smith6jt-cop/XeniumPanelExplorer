@@ -6,9 +6,12 @@
 #'         `cell_feature_matrix.h5`, `cells.parquet` (or `cells.csv.gz`),
 #'         and optionally `transcripts.parquet`.
 #'   \item Path to a saved Seurat object (`.rds` or `.qs2`).
-#'   \item Path to an AnnData export (`.h5ad`). Conversion path requires
-#'         `zellkonverter` and is left as a TODO until the user confirms
-#'         the `.h5ad` route is in use.
+#'   \item Path to an AnnData export (`.h5ad`). Read with `zellkonverter`
+#'         and converted to a Seurat object via `Seurat::as.Seurat`.
+#'         Spatial coordinates are lifted from `reducedDim(sce, "spatial")`
+#'         (the SpatialData / Xenium convention used by these h5ads) into
+#'         `meta.data$x_centroid` / `meta.data$y_centroid`, which the rest
+#'         of the app expects.
 #' }
 #'
 #' Caches the resulting Seurat object under `cache/` keyed by the input
@@ -40,7 +43,7 @@ load_xenium <- function(path, cache_dir = app_paths$cache, refresh = FALSE) {
            rds  = readRDS(apath),
            qs   = qs2::qs_read(apath),
            qs2  = qs2::qs_read(apath),
-           h5ad = stop("h5ad ingest not implemented yet — see CLAUDE.md §2."),
+           h5ad = .load_xenium_h5ad(apath),
            stop("unsupported file extension: .", ext,
                 " (expected .rds, .qs2, .h5ad, or a Xenium bundle directory)"))
   }
@@ -140,6 +143,55 @@ load_xenium <- function(path, cache_dir = app_paths$cache, refresh = FALSE) {
     dimnames = list(features, barcodes),
     repr = "C"
   )
+}
+
+#' Read an AnnData `.h5ad` Xenium export into a Seurat object.
+#'
+#' Uses `zellkonverter::readH5AD` to produce a `SingleCellExperiment`,
+#' picks the `counts` assay (preferred) or the first available assay,
+#' converts to Seurat, renames the assay to `Xenium` so the rest of the
+#' app's `nCount_Xenium` / `nFeature_Xenium` references line up, and
+#' copies the SpatialData `spatial` reducedDim into `meta.data` as
+#' `x_centroid` / `y_centroid`. Pre-existing `X_pca` / `X_umap`
+#' reductions are preserved as `pca` / `umap` so the user can inspect
+#' them without rerunning the pipeline.
+.load_xenium_h5ad <- function(h5ad_path) {
+  for (pkg in c("zellkonverter", "SingleCellExperiment", "SummarizedExperiment")) {
+    if (!requireNamespace(pkg, quietly = TRUE)) {
+      stop("h5ad ingest requires the `", pkg, "` package; install it first.")
+    }
+  }
+
+  sce <- zellkonverter::readH5AD(h5ad_path, reader = "R", use_hdf5 = FALSE)
+  assay_names <- SummarizedExperiment::assayNames(sce)
+  counts_name <- if ("counts" %in% assay_names) "counts" else assay_names[1]
+
+  counts_mat <- SummarizedExperiment::assay(sce, counts_name)
+  if (!inherits(counts_mat, "dgCMatrix")) {
+    counts_mat <- methods::as(counts_mat, "CsparseMatrix")
+  }
+  md <- as.data.frame(SingleCellExperiment::colData(sce), stringsAsFactors = FALSE)
+
+  obj <- SeuratObject::CreateSeuratObject(
+    counts    = counts_mat,
+    assay     = "Xenium",
+    meta.data = md,
+    project   = sub("\\.h5ad$", "", basename(h5ad_path))
+  )
+
+  rd_names <- SingleCellExperiment::reducedDimNames(sce)
+  if ("spatial" %in% rd_names) {
+    spat <- SingleCellExperiment::reducedDim(sce, "spatial")
+    if (ncol(spat) >= 2 && nrow(spat) == ncol(obj)) {
+      obj@meta.data$x_centroid <- as.numeric(spat[, 1])
+      obj@meta.data$y_centroid <- as.numeric(spat[, 2])
+    }
+  }
+
+  obj@misc$h5ad_source   <- h5ad_path
+  obj@misc$h5ad_assays   <- assay_names
+  obj@misc$h5ad_redDims  <- rd_names
+  obj
 }
 
 #' Read cells.parquet (or cells.csv.gz) from a Xenium bundle.

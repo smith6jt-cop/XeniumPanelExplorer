@@ -243,26 +243,51 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
                    showarrow = FALSE, x = 0.5, y = 0.5, xref = "paper",
                    yref = "paper"))))
       }
-      colour_col <- if ("log2_detection_ratio_326_over_323" %in% names(df))
-        df$log2_detection_ratio_326_over_323 else NA
+
+      # log10(1 + pct) so 0% is plottable; ticks at the original percent.
+      df$lx <- log10(1 + df$detection_pct_0041323)
+      df$ly <- log10(1 + df$detection_pct_0041326)
+      tick_pct  <- c(0, 1, 3, 10, 30, 100)
+      tick_vals <- log10(1 + tick_pct)
+      tick_text <- as.character(tick_pct)
+      ax_max    <- log10(101)
+
+      has_ratio <- "log2_detection_ratio_326_over_323" %in% names(df) &&
+                   any(is.finite(df$log2_detection_ratio_326_over_323))
+      marker <- if (has_ratio) {
+        r <- df$log2_detection_ratio_326_over_323
+        # Robust symmetric limits: 95th-pct of |ratio|, floored at 2,
+        # capped at 5 — stops one outlier from washing out the panel.
+        q <- stats::quantile(abs(r), 0.95, na.rm = TRUE)
+        cmax_q <- min(5, max(2, q))
+        list(size = 6, color = r,
+             cmin = -cmax_q, cmax = cmax_q, cmid = 0, cauto = FALSE,
+             colorscale = "RdBu", reversescale = TRUE,
+             colorbar = list(title = "log2 326/323"))
+      } else {
+        list(size = 6, color = "#1f77b4")
+      }
+
       plotly::plot_ly(
         df,
-        x = ~detection_pct_0041323,
-        y = ~detection_pct_0041326,
+        x = ~lx, y = ~ly,
         type = "scatter", mode = "markers",
-        marker = list(size = 6, color = colour_col,
-                      colorbar = list(title = "log2 326/323"),
-                      colorscale = "RdBu", reversescale = TRUE,
-                      cmid = 0),
-        text = ~gene, hoverinfo = "text+x+y"
+        marker = marker,
+        text = ~sprintf("%s<br>0041323: %.2f%%<br>0041326: %.2f%%",
+                        gene, detection_pct_0041323, detection_pct_0041326),
+        hoverinfo = "text"
       ) |>
         plotly::layout(
-          xaxis = list(title = "detection_pct_0041323"),
-          yaxis = list(title = "detection_pct_0041326",
+          xaxis = list(title    = "detection_pct_0041323",
+                       tickvals = tick_vals, ticktext = tick_text,
+                       range    = c(0, ax_max), zeroline = FALSE),
+          yaxis = list(title    = "detection_pct_0041326",
+                       tickvals = tick_vals, ticktext = tick_text,
+                       range    = c(0, ax_max), zeroline = FALSE,
                        scaleanchor = "x", scaleratio = 1),
-          shapes = list(list(type = "line", x0 = 0, y0 = 0, x1 = 100,
-                              y1 = 100, line = list(dash = "dot",
-                                                    color = "gray")))
+          shapes = list(list(type = "line",
+                             x0 = 0, y0 = 0, x1 = ax_max, y1 = ax_max,
+                             line = list(dash = "dot", color = "gray")))
         )
     })
 

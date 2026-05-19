@@ -80,28 +80,35 @@ load_xenium_server <- function(id, panels, app_state) {
                                 filetypes = c("rds", "qs", "qs2"))
 
     chosen_path <- shiny::reactiveVal(NULL)
+    # Wrap path in a list with a per-click nonce so re-clicks with the same
+    # path still invalidate downstream reactives (plain reactiveVal compares
+    # by identity and would no-op on the second click).
+    set_chosen <- function(p) {
+      chosen_path(list(path = p, nonce = stats::runif(1)))
+    }
 
     shiny::observeEvent(input$bundle_dir, {
       sel <- shinyFiles::parseDirPath(roots, input$bundle_dir)
-      if (length(sel) == 1L && nzchar(sel)) chosen_path(as.character(sel))
+      if (length(sel) == 1L && nzchar(sel)) set_chosen(as.character(sel))
     })
     shiny::observeEvent(input$rds_file, {
       sel <- shinyFiles::parseFilePaths(roots, input$rds_file)
-      if (nrow(sel) == 1L) chosen_path(as.character(sel$datapath[1]))
+      if (nrow(sel) == 1L) set_chosen(as.character(sel$datapath[1]))
     })
     shiny::observeEvent(input$load_manual, {
-      p <- input$manual_path
-      if (!is.null(p) && nzchar(p)) chosen_path(p)
+      p <- trimws(input$manual_path %||% "")
+      if (nzchar(p)) set_chosen(path.expand(p))
     })
     shiny::observeEvent(input$load_demo, {
-      chosen_path(demo_path_sentinel())
+      set_chosen(demo_path_sentinel())
     })
 
     waiter::useWaiter()
 
     xen_load <- shiny::reactive({
-      p <- chosen_path()
-      shiny::req(p)
+      cp <- chosen_path()
+      shiny::req(cp, cp$path)
+      p <- cp$path
       is_demo <- identical(p, demo_path_sentinel())
       w <- waiter::Waiter$new(
         html = shiny::tagList(
@@ -125,10 +132,16 @@ load_xenium_server <- function(id, panels, app_state) {
       out <- xen_load()
       if (inherits(out, "load_xenium_error")) {
         app_state$xen <- NULL
+        shiny::showNotification(
+          paste0("Load failed: ", out$error),
+          type = "error", duration = 10)
         return()
       }
       app_state$xen      <- out
-      app_state$xen_path <- chosen_path()
+      app_state$xen_path <- chosen_path()$path
+      shiny::showNotification(
+        sprintf("Loaded %d cells × %d genes.", ncol(out), nrow(out)),
+        type = "message", duration = 5)
     }, ignoreNULL = FALSE)
 
     output$status <- shiny::renderUI({
@@ -139,13 +152,14 @@ load_xenium_server <- function(id, panels, app_state) {
       }
       shiny::req(out)
       cache_info <- attr(out, "load_xenium_cache")
-      is_demo <- identical(chosen_path(), demo_path_sentinel())
+      cp <- chosen_path()
+      is_demo <- identical(cp$path, demo_path_sentinel())
       path_line <- if (is_demo) {
         shiny::p(shiny::strong("Source: "),
                  shiny::span(class = "badge bg-warning text-dark",
                              "Demo (synthetic)"))
       } else {
-        shiny::p(shiny::strong("Path: "), shiny::code(chosen_path()))
+        shiny::p(shiny::strong("Path: "), shiny::code(cp$path))
       }
       shiny::tagList(
         path_line,
@@ -256,6 +270,8 @@ load_xenium_server <- function(id, panels, app_state) {
       }
       n  <- nrow(md)
       sz <- if (n > 50000L) 2 else if (n > 10000L) 3 else 4
+      xr <- range(md$x_centroid, na.rm = TRUE)
+      yr <- range(md$y_centroid, na.rm = TRUE)
       plotly::plot_ly(
         md, x = ~x_centroid, y = ~y_centroid,
         type = "scattergl", mode = "markers",
@@ -265,8 +281,12 @@ load_xenium_server <- function(id, panels, app_state) {
       ) |>
         plotly::layout(
           xaxis = list(title = "x_centroid",
-                       scaleanchor = "y", scaleratio = 1),
-          yaxis = list(title = "y_centroid"),
+                       range = xr,
+                       scaleanchor = "y", scaleratio = 1,
+                       constrain = "domain"),
+          yaxis = list(title = "y_centroid",
+                       range = yr,
+                       constrain = "domain"),
           showlegend = FALSE
         )
     })

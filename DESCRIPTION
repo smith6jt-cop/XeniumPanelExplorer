@@ -48,5 +48,8 @@ Suggests:
     shinytest2,
     chromote,
     rprojroot,
-    leidenAlg
+    leidenAlg,
+    zellkonverter,
+    SingleCellExperiment,
+    SummarizedExperiment
 Config/testthat/edition: 3
