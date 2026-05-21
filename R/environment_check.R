@@ -10,9 +10,10 @@
 #' \itemize{
 #'   \item R version >= 4.4 (CLAUDE.md §3 minimum).
 #'   \item Every required R package in the Imports list can be loaded.
-#'   \item `data/panel_audit/` exists and contains
-#'         `subpanel_summary_v2.csv` (the only file the app refuses
-#'         to start without).
+#'   \item `data/reference_5k/xenium5k_genes.csv` exists (the constant
+#'         5K panel — the only file the app refuses to start without)
+#'         and at least one tissue with a `manifest.yml` under
+#'         `data/tissues/`.
 #'   \item Optional probes (warnings only): `chromote::find_chrome()`
 #'         resolves a Chrome binary (needed by the shinytest2
 #'         end-to-end test, never by the running app).
@@ -50,11 +51,17 @@ check_environment <- function(
       paste(missing_pkgs, collapse = ", ")))
   }
 
-  audit <- file.path(app_paths$panel_audit, "subpanel_summary_v2.csv")
-  if (!file.exists(audit)) {
+  ref5k <- file.path(app_paths$reference_5k, "xenium5k_genes.csv")
+  if (!file.exists(ref5k)) {
     warnings <- c(warnings, sprintf(
-      "%s not found. The Overview / Panel Browser tabs will be empty until it's restored.",
-      audit))
+      "%s not found. The 5K reference is required for every tissue.",
+      ref5k))
+  }
+  tids <- available_tissues()
+  if (!length(tids)) {
+    warnings <- c(warnings, sprintf(
+      "No tissues with a manifest.yml under %s. Drop a tissue tree in to enable analysis.",
+      app_paths$tissues_root))
   }
 
   if (requireNamespace("chromote", quietly = TRUE)) {

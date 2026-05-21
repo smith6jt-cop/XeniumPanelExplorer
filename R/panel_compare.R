@@ -32,20 +32,21 @@ per_gene_mean_expr <- function(xen) {
 #' @param min_detection_pct numeric ≥ 0, the per-gene detection cutoff
 #'        applied to the loaded data
 compute_subpanel_coverage <- function(panels, xen, min_detection_pct = 0,
-                                      custom_label = "custom_T1D_GWAS_panel") {
+                                      custom_label = NULL) {
   det <- per_gene_detection_pct(xen)
   mu  <- per_gene_mean_expr(xen)
   data_genes <- names(det)
 
-  custom_block <- stats::setNames(
-    list(data.frame(gene = panels$custom$gene)),
-    custom_label
-  )
-  groups <- c(
-    panels$subpanels,
-    custom_block,
-    list(xenium5k_in_audit = data.frame(gene = panels$xenium5k$gene))
-  )
+  groups <- panels$subpanels
+  if (!is.null(panels$custom) && nrow(panels$custom) > 0L) {
+    lbl <- custom_label %||% custom_panel_label(NULL, panels)
+    groups <- c(groups, stats::setNames(
+      list(data.frame(gene = panels$custom$gene)), lbl))
+  }
+  # xenium5k_in_audit row reflects the constant 5K reference (not the
+  # audit table, which may carry extra non-5K custom-panel genes).
+  groups <- c(groups,
+              list(xenium5k_in_audit = data.frame(gene = panels$reference_5k$gene)))
 
   rows <- lapply(names(groups), function(nm) {
     gset <- unique(as.character(groups[[nm]]$gene))

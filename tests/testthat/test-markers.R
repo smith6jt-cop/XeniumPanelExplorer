@@ -1,6 +1,6 @@
 test_that("compute_markers returns the standard presto column set", {
   skip_if_not_installed("presto")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = 0.5
@@ -21,7 +21,7 @@ test_that("compute_markers returns the standard presto column set", {
 })
 
 test_that("top_markers respects the per-group N and the filter cutoffs", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = 0.5
@@ -39,7 +39,7 @@ test_that("top_markers respects the per-group N and the filter cutoffs", {
 })
 
 test_that("compute_markers errors when fewer than two groups exist", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   xen$one_group <- "a"
   expect_error(compute_markers(xen, "one_group"),

@@ -25,10 +25,15 @@ xenium_panel_app <- function() {
   )
 
   server <- function(input, output, session) {
+    # Default tissue: the first manifest under data/tissues/ alphabetically.
+    initial_tissues <- available_tissues()
+    initial_tissue  <- if (length(initial_tissues)) initial_tissues[1] else NULL
+
     # App-wide reactive state. `selected_subpanel` is the canonical key
     # (filename stem), e.g. "01_pancreas_endocrine". `nav_target` is the
     # `value` of the nav_panel to switch to.
     app_state <- shiny::reactiveValues(
+      selected_tissue       = initial_tissue,
       selected_subpanel     = NULL,
       nav_target            = NULL,
       xen                   = NULL,
@@ -45,8 +50,8 @@ xenium_panel_app <- function() {
       markers_last_key      = NULL,
       env_warnings          = env_check$warnings,
       env_errors            = env_check$errors,
-      # Session-scoped override of `panels$custom` (the T1D-GWAS panel).
-      # When non-NULL, spliced in by the `panels` reactive below.
+      # Session-scoped override of `panels$custom`. When non-NULL, spliced
+      # in by the `panels` reactive below. Cleared on tissue switch.
       custom_panel_override = NULL,
       custom_panel_status   = NULL
     )
@@ -68,10 +73,11 @@ xenium_panel_app <- function() {
       ))
     }, ignoreNULL = FALSE)
 
-    # Loaded once at session start. Wrap in a reactive so future M-x
-    # modules can re-trigger a reload if the user adds files at runtime.
+    # Re-runs whenever the selected tissue changes. Hits the disk again
+    # so a user editing data/tissues/<t>/ at runtime is picked up.
     panels_default <- shiny::reactive({
-      load_panels()
+      shiny::req(app_state$selected_tissue)
+      load_panels(app_state$selected_tissue)
     })
     # `panels` splices any user-uploaded custom-panel override into
     # `panels$custom` so every downstream module sees it.
@@ -81,6 +87,28 @@ xenium_panel_app <- function() {
       if (!is.null(ov)) base$custom <- ov
       base
     })
+
+    # Clearing the custom-panel override on tissue switch is required:
+    # an upload enriched against (say) pancreas T1D-GWAS does not make
+    # sense as the "custom panel" for thymus.
+    shiny::observeEvent(app_state$selected_tissue, {
+      if (!is.null(app_state$custom_panel_override) ||
+          !is.null(app_state$custom_panel_status)) {
+        app_state$custom_panel_override <- NULL
+        app_state$custom_panel_status   <- NULL
+      }
+      p <- tryCatch(panels_default(), error = function(e) NULL)
+      if (!is.null(p)) {
+        shinyWidgets::sendSweetAlert(
+          session    = session,
+          title      = sprintf("Switched to %s", p$tissue$display_name),
+          text       = sprintf("%d subpanels indexed; %d audit-annotated genes.",
+                               length(p$subpanels), nrow(p$xenium5k)),
+          type       = "info",
+          btn_labels = "OK"
+        )
+      }
+    }, ignoreInit = TRUE, ignoreNULL = TRUE)
 
     overview_server("overview",          panels, app_state)
     panel_browser_server("panel_browser", panels, panels_default, app_state)

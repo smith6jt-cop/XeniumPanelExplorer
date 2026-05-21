@@ -1,76 +1,293 @@
-#' Read every CSV in `data/panel_audit/` into a structured list.
+#' Tissue-aware panel loading.
 #'
-#' The audit directory holds three groups of files:
-#'   * 49 per-subpanel CSVs (`subpanel_01_*.csv` ... `subpanel_49_*.csv`),
-#'     plus the `99` re-annotated and `99c` / `99d` residuals;
-#'   * `subpanel_summary_v2.csv` indexing 01-49 + 99c + 99d (the post-
-#'     refinement system; 99 itself is not a row in the v2 summary because
-#'     it was split across 21-49);
-#'   * ancillary tables: `custom_T1D_GWAS_panel.csv`,
-#'     `xenium5k_in_audit.csv`, `xenium5k_already_excluded.csv`, and the
-#'     six `hIO_*.csv` files.
+#' Three layers on disk:
+#'   1. `data/reference_5k/xenium5k_genes.csv` — constant 10x Xenium Prime
+#'      5K Human Pan-Tissue gene list with biology annotations
+#'      (gene, gene_id, full_name, location, cell_type, cellchat_pathway).
+#'   2. `data/subpanels_shared/*.csv` — biology-only subpanel definitions
+#'      (gene, category, rationale, single_gene_panel_note [, HALLMARK,
+#'      KEGG, REACTOME]).
+#'   3. `data/tissues/<tissue>/` — tissue-specific input:
+#'        manifest.yml        — tissue_id, reference_runs, optional custom_panel
+#'        subpanel_summary.csv
+#'        subpanels/*.csv     — tissue-specific subpanels (biology-only)
+#'        audit/xenium5k_audit.csv — per-gene detection_pct_<run>,
+#'                                    n_cells_<run>, log2_detection_ratio,
+#'                                    exclude_recommended
+#'        audit/xenium5k_excluded.csv (optional)
+#'        audit/hIO_*.csv     (optional)
+#'        custom_panel.csv    (optional, declared in manifest)
 #'
-#' Returned shape:
-#' \describe{
-#'   \item{summary}{data.frame from `subpanel_summary_v2.csv`.}
-#'   \item{subpanels}{named list of data.frames, keyed by file stem
-#'         (e.g. `"01_pancreas_endocrine"`, `"99d_truly_unannotated"`).}
-#'   \item{custom}{custom 100-gene T1D-GWAS panel.}
-#'   \item{xenium5k}{the 4,992 5K-shared genes.}
-#'   \item{excluded}{the 106 already-excluded genes.}
-#'   \item{hIO}{named list of the six `hIO_*` data.frames.}
-#'   \item{meta}{`path`, `mtime`, vector of subpanel keys.}
-#' }
-#'
-#' Reads use `data.table::fread`.
-load_panels <- function(path = app_paths$panel_audit) {
+#' At load time the composer left-joins the audit table and the 5K
+#' reference biology columns onto every subpanel and the custom panel.
+#' Downstream code receives a `panels` object with the same field shape
+#' the pre-refactor code expected; the joined columns make subpanel
+#' data.frames carry detection_pct_<run> and biology annotations inline.
+
+# ---------------------------------------------------------------------------
+# Atomic readers
+# ---------------------------------------------------------------------------
+
+.read_csv <- function(p) {
+  data.table::fread(p, na.strings = c("", "NA"), data.table = FALSE,
+                    showProgress = FALSE)
+}
+
+#' Read the constant 5K reference gene table.
+#' @return data.frame keyed by `gene`.
+load_reference_5k <- function(path = app_paths$reference_5k) {
+  f <- file.path(path, "xenium5k_genes.csv")
+  if (!file.exists(f)) {
+    stop("reference 5K not found: ", f,
+         "\nExpected the constant `xenium5k_genes.csv` to live here.")
+  }
+  .read_csv(f)
+}
+
+#' Read tissue-agnostic subpanel definitions.
+#' @return named list of data.frames keyed by file stem.
+load_shared_subpanels <- function(path = app_paths$subpanels_shared) {
   if (!dir.exists(path)) {
-    stop("panel_audit directory not found: ", path)
+    return(stats::setNames(list(), character()))
   }
-
-  read_csv <- function(p) {
-    data.table::fread(p, na.strings = c("", "NA"), data.table = FALSE,
-                      showProgress = FALSE)
-  }
-
   files <- list.files(path, pattern = "\\.csv$", full.names = TRUE)
-  names(files) <- basename(files)
+  if (!length(files)) return(stats::setNames(list(), character()))
+  keys <- sub("\\.csv$", "", basename(files))
+  stats::setNames(lapply(files, .read_csv), keys)
+}
 
-  required <- "subpanel_summary_v2.csv"
-  if (!required %in% names(files)) {
-    stop("missing ", required, " in ", path)
+#' Index every tissue directory under `root` by its manifest's `tissue_id`.
+#'
+#' The manifest is authoritative for tissue identity — folder names are
+#' arbitrary discovery anchors, not the source of truth. Returns a named
+#' character vector mapping `tissue_id` -> absolute folder path. Folders
+#' missing a manifest, missing a `tissue_id`, or with duplicate ids are
+#' surfaced via warning and skipped.
+tissues_index <- function(root = app_paths$tissues_root) {
+  if (!dir.exists(root)) return(stats::setNames(character(), character()))
+  candidates <- list.dirs(root, recursive = FALSE, full.names = TRUE)
+  ids   <- character()
+  paths <- character()
+  for (d in candidates) {
+    mf <- file.path(d, "manifest.yml")
+    if (!file.exists(mf)) next
+    m <- tryCatch(yaml::read_yaml(mf), error = function(e) NULL)
+    tid <- m$tissue_id
+    if (is.null(tid) || !nzchar(tid)) {
+      warning("manifest.yml at ", mf, " has no tissue_id; skipping")
+      next
+    }
+    if (tid %in% ids) {
+      warning("duplicate tissue_id '", tid, "' at ", d,
+              "; already registered from ", paths[match(tid, ids)],
+              ". Keeping the first.")
+      next
+    }
+    ids   <- c(ids,   tid)
+    paths <- c(paths, normalizePath(d, mustWork = FALSE))
   }
+  stats::setNames(paths, ids)
+}
 
-  summary_df <- read_csv(files[["subpanel_summary_v2.csv"]])
+#' List tissue ids known under `root`.
+available_tissues <- function(root = app_paths$tissues_root) {
+  unname(names(tissues_index(root)))
+}
 
-  subpanel_files <- files[grepl("^subpanel_[0-9]", names(files))]
-  subpanel_keys  <- sub("^subpanel_", "", sub("\\.csv$", "", names(subpanel_files)))
-  subpanels      <- stats::setNames(lapply(subpanel_files, read_csv), subpanel_keys)
+#' Resolve a tissue id to its folder path (manifest-driven).
+tissue_dir_for <- function(tissue_id, root = app_paths$tissues_root) {
+  idx <- tissues_index(root)
+  if (!(tissue_id %in% names(idx))) {
+    stop("tissue '", tissue_id, "' not found under ", root,
+         ". Known: ", paste(names(idx), collapse = ", "))
+  }
+  unname(idx[tissue_id])
+}
 
-  hIO_files <- files[grepl("^hIO_", names(files))]
-  hIO_keys  <- sub("\\.csv$", "", names(hIO_files))
-  hIO       <- stats::setNames(lapply(hIO_files, read_csv), hIO_keys)
+#' Read a tissue payload (manifest + subpanels + audit + optional custom).
+#' @return list(manifest, summary, subpanels, audit, excluded, hIO, custom).
+load_tissue <- function(tissue_id, root = app_paths$tissues_root) {
+  tdir <- tissue_dir_for(tissue_id, root)
+  manifest_path <- file.path(tdir, "manifest.yml")
+  manifest <- yaml::read_yaml(manifest_path)
 
-  pick <- function(name) {
-    if (name %in% names(files)) read_csv(files[[name]]) else NULL
+  summary_path <- file.path(tdir, "subpanel_summary.csv")
+  summary_df <- if (file.exists(summary_path)) .read_csv(summary_path) else
+    data.frame(subpanel = character(), n_genes = integer(),
+               description = character(),
+               pct_of_5K_kept_pool = numeric(),
+               stringsAsFactors = FALSE)
+
+  subp_dir <- file.path(tdir, "subpanels")
+  subpanels <- if (dir.exists(subp_dir)) {
+    files <- list.files(subp_dir, pattern = "\\.csv$", full.names = TRUE)
+    if (length(files)) {
+      stats::setNames(lapply(files, .read_csv),
+                      sub("\\.csv$", "", basename(files)))
+    } else stats::setNames(list(), character())
+  } else stats::setNames(list(), character())
+
+  audit_path <- file.path(tdir, "audit", "xenium5k_audit.csv")
+  audit_df <- if (file.exists(audit_path)) .read_csv(audit_path) else
+    data.frame(gene = character(), stringsAsFactors = FALSE)
+
+  excluded_path <- file.path(tdir, "audit", "xenium5k_excluded.csv")
+  excluded_df <- if (file.exists(excluded_path)) .read_csv(excluded_path) else
+    data.frame(gene = character(), stringsAsFactors = FALSE)
+
+  hIO_dir <- file.path(tdir, "audit")
+  hIO <- if (dir.exists(hIO_dir)) {
+    files <- list.files(hIO_dir, pattern = "^hIO_.*\\.csv$",
+                        full.names = TRUE)
+    if (length(files)) {
+      stats::setNames(lapply(files, .read_csv),
+                      sub("\\.csv$", "", basename(files)))
+    } else stats::setNames(list(), character())
+  } else stats::setNames(list(), character())
+
+  custom_df <- NULL
+  cp <- manifest$custom_panel
+  if (!is.null(cp) && !is.null(cp$file)) {
+    cp_path <- file.path(tdir, cp$file)
+    if (file.exists(cp_path)) {
+      custom_df <- .read_csv(cp_path)
+    } else {
+      warning("custom_panel.file declared in manifest but not found: ", cp_path)
+    }
   }
 
   list(
+    id        = tissue_id,
+    manifest  = manifest,
     summary   = summary_df,
     subpanels = subpanels,
-    custom    = pick("custom_T1D_GWAS_panel.csv"),
-    xenium5k  = pick("xenium5k_in_audit.csv"),
-    excluded  = pick("xenium5k_already_excluded.csv"),
+    audit     = audit_df,
+    excluded  = excluded_df,
     hIO       = hIO,
-    meta      = list(
-      path           = normalizePath(path),
-      mtime          = max(file.mtime(unname(files))),
-      subpanel_keys  = sort(subpanel_keys)
+    custom    = custom_df,
+    dir       = tdir
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Join helpers — restore the legacy per-subpanel schema by left-joining
+# audit columns + reference_5k biology columns onto each gene table.
+# ---------------------------------------------------------------------------
+
+#' Audit-table column names for the given reference run IDs.
+#' Used by validators that need to know what columns to expect.
+audit_detection_cols <- function(reference_runs) {
+  if (!length(reference_runs)) return(character())
+  c(paste0("detection_pct_", reference_runs),
+    paste0("n_cells_",       reference_runs),
+    "log2_detection_ratio")
+}
+
+# Left-join `df` on `gene` against `ref` (data.frame). Columns from `ref`
+# that already exist on `df` are skipped — caller-supplied values win.
+.left_join_gene <- function(df, ref) {
+  if (is.null(ref) || !nrow(ref) || !"gene" %in% names(df) ||
+      !"gene" %in% names(ref)) {
+    return(df)
+  }
+  add_cols <- setdiff(names(ref), c("gene", names(df)))
+  if (!length(add_cols)) return(df)
+  ix <- match(df$gene, ref$gene)
+  for (col in add_cols) df[[col]] <- ref[[col]][ix]
+  df
+}
+
+# Apply audit + ref5k joins to a gene table.
+.annotate_with_tissue <- function(df, tissue, ref5k) {
+  df <- .left_join_gene(df, tissue$audit)
+  df <- .left_join_gene(df, ref5k)
+  df
+}
+
+# ---------------------------------------------------------------------------
+# Composer — returns the legacy `panels` shape
+# ---------------------------------------------------------------------------
+
+#' Compose the in-memory `panels` object for a tissue.
+#'
+#' Returns a list with the legacy keys downstream modules consume:
+#'   summary, subpanels (named list), custom (data.frame or NULL),
+#'   xenium5k (joined audit-as-reference table), excluded, hIO, meta.
+#' Plus tissue-aware keys: tissue (id + manifest), reference_5k, reference_runs.
+load_panels <- function(tissue_id = NULL,
+                        reference_5k_path = app_paths$reference_5k,
+                        subpanels_shared_path = app_paths$subpanels_shared,
+                        tissues_root = app_paths$tissues_root) {
+
+  ref5k <- load_reference_5k(reference_5k_path)
+  shared <- load_shared_subpanels(subpanels_shared_path)
+
+  tids <- available_tissues(tissues_root)
+  if (is.null(tissue_id)) {
+    if (!length(tids)) stop("no tissues found under ", tissues_root)
+    tissue_id <- tids[1]
+  } else if (!(tissue_id %in% tids)) {
+    stop("tissue '", tissue_id, "' not found. Available: ",
+         paste(tids, collapse = ", "))
+  }
+  tissue <- load_tissue(tissue_id, root = tissues_root)
+
+  # Merge shared + tissue-specific subpanels (tissue wins on collision),
+  # then annotate every subpanel with audit + biology columns.
+  merged_subp <- shared
+  for (k in names(tissue$subpanels)) merged_subp[[k]] <- tissue$subpanels[[k]]
+  annotated_subp <- lapply(merged_subp, .annotate_with_tissue,
+                           tissue = tissue, ref5k = ref5k)
+
+  # Custom panel — optional. Annotate when present.
+  custom_df <- tissue$custom
+  if (!is.null(custom_df) && nrow(custom_df)) {
+    custom_df <- .annotate_with_tissue(custom_df, tissue, ref5k)
+  }
+
+  # xenium5k = audit table joined with reference_5k biology (preserves
+  # the schema legacy code expected from `xenium5k_in_audit.csv`).
+  xenium5k_df <- .left_join_gene(tissue$audit, ref5k)
+  # If reference_5k has genes not present in audit, still surface them so
+  # validators see the full 5K reference universe.
+  missing_ref <- setdiff(ref5k$gene, xenium5k_df$gene)
+  if (length(missing_ref)) {
+    add <- ref5k[ref5k$gene %in% missing_ref, , drop = FALSE]
+    for (col in setdiff(names(xenium5k_df), names(add))) add[[col]] <- NA
+    xenium5k_df <- rbind(xenium5k_df, add[, names(xenium5k_df), drop = FALSE])
+  }
+
+  list(
+    summary        = tissue$summary,
+    subpanels      = annotated_subp,
+    custom         = custom_df,
+    xenium5k       = xenium5k_df,
+    excluded       = tissue$excluded,
+    hIO            = tissue$hIO,
+    reference_5k   = ref5k,
+    reference_runs = as.character(tissue$manifest$reference_runs %||% character()),
+    tissue         = list(
+      id           = tissue_id,
+      display_name = tissue$manifest$display_name %||% tissue_id,
+      manifest     = tissue$manifest,
+      dir          = tissue$dir
+    ),
+    meta           = list(
+      tissue_id        = tissue_id,
+      reference_5k_dir = normalizePath(reference_5k_path, mustWork = FALSE),
+      shared_dir       = normalizePath(subpanels_shared_path, mustWork = FALSE),
+      tissue_dir       = normalizePath(tissue$dir, mustWork = FALSE),
+      mtime            = Sys.time(),
+      subpanel_keys    = sort(names(annotated_subp))
     )
   )
 }
 
-#' Resolve a `subpanel` value from `summary_v2` to a `subpanels` list key.
+# ---------------------------------------------------------------------------
+# Subpanel-key resolution + custom-panel display labels
+# ---------------------------------------------------------------------------
+
+#' Resolve a `subpanel` value from `summary` to a `subpanels` list key.
 #'
 #' The summary's `subpanel` column uses the long name
 #' (`99d_truly_unannotated_subset_of_99c`) whereas the files on disk use
@@ -82,46 +299,57 @@ resolve_subpanel_key <- function(summary_subpanel, panels) {
   if (length(hit) == 1L) hit else NA_character_
 }
 
-#' Short display label for the custom-panel slot.
+#' Stable opaque key for the custom-panel slot (tissue-agnostic).
+custom_panel_slot_key <- function() "custom_panel"
+
+#' Display label for the custom-panel slot.
 #'
-#' Returns the stem of the uploaded filename (basename, no extension) when
-#' an override is active, otherwise the canonical key. Used at every UI
-#' surface that prints the custom-panel name so the uploaded filename
-#' propagates beyond the Panel Browser dropdown.
-custom_panel_label <- function(status,
-                               default = "custom_T1D_GWAS_panel") {
-  if (is.null(status) || is.null(status$source_name)) return(default)
-  tools::file_path_sans_ext(status$source_name)
+#' Priority:
+#'   1. Uploaded panel — basename of the upload (no extension).
+#'   2. Tissue manifest `custom_panel.display_name`.
+#'   3. Generic fallback `"custom_panel"`.
+custom_panel_label <- function(status, panels = NULL) {
+  if (!is.null(status) && !is.null(status$source_name)) {
+    return(tools::file_path_sans_ext(status$source_name))
+  }
+  if (!is.null(panels) && !is.null(panels$tissue$manifest$custom_panel$display_name)) {
+    return(panels$tissue$manifest$custom_panel$display_name)
+  }
+  "custom_panel"
 }
 
 #' Pass-through display-label mapper for any panel key.
 #'
-#' Only `custom_T1D_GWAS_panel` is rewritten (via [custom_panel_label()]);
-#' every other key is returned as-is.
-panel_display_label <- function(key, status) {
-  if (identical(key, "custom_T1D_GWAS_panel")) {
-    return(custom_panel_label(status))
+#' Only the custom-panel slot is rewritten; every other key is returned
+#' as-is.
+panel_display_label <- function(key, status, panels = NULL) {
+  if (identical(key, custom_panel_slot_key())) {
+    return(custom_panel_label(status, panels))
   }
   key
 }
 
-#' Canonical 10-column schema of `custom_T1D_GWAS_panel.csv`.
-custom_panel_canonical_cols <- function() {
+# ---------------------------------------------------------------------------
+# Custom-panel uploads (session override)
+# ---------------------------------------------------------------------------
+
+#' Canonical column schema for the custom-panel slot when no upload has
+#' been provided. Composed dynamically from the tissue's reference runs.
+custom_panel_canonical_cols <- function(reference_runs = character()) {
   c("gene", "category", "rationale", "single_gene_panel_note",
-    "exclude_recommended", "detection_pct_0041323",
-    "detection_pct_0041326", "n_cells_0041323", "n_cells_0041326",
-    "log2_detection_ratio_326_over_323")
+    "exclude_recommended",
+    audit_detection_cols(reference_runs))
 }
 
 #' Parse a user-uploaded CSV and enrich it to the canonical custom-panel
-#' schema by filling missing columns from the original T1D-GWAS panel and
-#' the xenium5k audit reference for any genes that overlap.
+#' schema by filling missing columns from the active tissue's custom
+#' panel (if any) and the tissue audit table for overlapping genes.
 #'
 #' @param csv_path Path to the uploaded CSV.
-#' @param panels   The default panels list (from `load_panels()`). The
-#'                 enrichment sources are `panels$custom` then
-#'                 `panels$xenium5k`; user-supplied non-NA values are
-#'                 never overwritten.
+#' @param panels   Output of `load_panels()`. Enrichment sources:
+#'                 `panels$custom` (tissue's default custom panel — may be
+#'                 NULL when the tissue has none) then `panels$xenium5k`
+#'                 (the joined audit reference).
 #' @param source_name Optional label (defaults to `basename(csv_path)`).
 #' @return list(df, n_genes, n_enriched_from_custom, n_enriched_from_5k,
 #'              n_unmatched, source_name)
@@ -137,7 +365,6 @@ upload_custom_panel <- function(csv_path, panels, source_name = NULL) {
     stop("Uploaded CSV is empty.")
   }
 
-  # Normalise the gene column: accept any case (gene/Gene/GENE).
   gene_col <- grep("^gene$", names(df), ignore.case = TRUE, value = TRUE)
   if (length(gene_col) == 0L) {
     stop("Uploaded CSV must have a `gene` column (case-insensitive). ",
@@ -152,20 +379,13 @@ upload_custom_panel <- function(csv_path, panels, source_name = NULL) {
     stop("Uploaded CSV has no valid (non-empty) gene rows.")
   }
 
-  # Ensure the canonical columns exist (add as NA where missing). We keep
-  # any extra user columns at the end.
-  canon <- custom_panel_canonical_cols()
-  for (col in canon) {
-    if (!(col %in% names(df))) df[[col]] <- NA
-  }
-  # Re-order so canonical columns come first.
+  canon <- custom_panel_canonical_cols(panels$reference_runs %||% character())
+  for (col in canon) if (!(col %in% names(df))) df[[col]] <- NA
   extra <- setdiff(names(df), canon)
   df <- df[, c(canon, extra), drop = FALSE]
 
-  # Enrichment sources: prefer the original T1D-GWAS panel (more
-  # contextual to a custom-panel upload), fall back to xenium5k.
   fill_cols <- setdiff(canon, "gene")
-  src_custom <- panels$custom
+  src_custom <- panels$custom        # may be NULL when tissue has none
   src_5k     <- panels$xenium5k
 
   n_from_custom <- 0L
@@ -176,7 +396,6 @@ upload_custom_panel <- function(csv_path, panels, source_name = NULL) {
     g <- df$gene[i]
     matched <- FALSE
 
-    # 1) Original T1D-GWAS panel.
     if (!is.null(src_custom) && nrow(src_custom) > 0L) {
       hit <- which(src_custom$gene == g)
       if (length(hit) >= 1L) {
@@ -193,7 +412,6 @@ upload_custom_panel <- function(csv_path, panels, source_name = NULL) {
       }
     }
 
-    # 2) xenium5k_in_audit (only fills cells still NA).
     if (!is.null(src_5k) && nrow(src_5k) > 0L) {
       hit <- which(src_5k$gene == g)
       if (length(hit) >= 1L) {
@@ -222,3 +440,5 @@ upload_custom_panel <- function(csv_path, panels, source_name = NULL) {
     source_name            = source_name
   )
 }
+
+`%||%` <- function(a, b) if (is.null(a)) b else a

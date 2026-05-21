@@ -3,8 +3,13 @@
 #' Read at app start; downstream modules pull paths from `app_paths`.
 
 app_paths <- list(
-  panel_audit = "data/panel_audit",
-  cache       = "cache"
+  # Constant — the 10x Xenium Prime 5K Human Pan-Tissue gene list.
+  reference_5k     = "data/reference_5k",
+  # Tissue-agnostic subpanel biology definitions (no detection_pct etc).
+  subpanels_shared = "data/subpanels_shared",
+  # Per-tissue inputs (subpanels, audit, optional custom panel).
+  tissues_root     = "data/tissues",
+  cache            = "cache"
 )
 
 app_milestones <- list(

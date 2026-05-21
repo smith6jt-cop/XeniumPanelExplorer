@@ -1,5 +1,5 @@
 test_that("compute_subpanel_coverage returns one row per subpanel + ancillary", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   cov <- compute_subpanel_coverage(panels, xen, min_detection_pct = 0)
@@ -25,7 +25,7 @@ test_that("compute_subpanel_coverage returns one row per subpanel + ancillary", 
 })
 
 test_that("min_detection_pct cutoff monotonically reduces n_passing", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   c0  <- compute_subpanel_coverage(panels, xen, min_detection_pct = 0)
@@ -37,7 +37,7 @@ test_that("min_detection_pct cutoff monotonically reduces n_passing", {
 })
 
 test_that("top_n_by_subpanel returns a long data.frame respecting N", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   df <- top_n_by_subpanel(panels, xen, n = 5L, min_detection_pct = 0)
@@ -49,7 +49,7 @@ test_that("top_n_by_subpanel returns a long data.frame respecting N", {
 })
 
 test_that("per_gene_detection_pct is a named numeric vector summing reasonably", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   d <- per_gene_detection_pct(xen)

@@ -1,6 +1,6 @@
 test_that("run_cluster_pipeline produces ≥2 cluster columns and a UMAP", {
   skip_if_not_installed("Seurat")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   out <- run_cluster_pipeline(xen, panels, list(
@@ -33,7 +33,7 @@ test_that("run_cluster_pipeline produces ≥2 cluster columns and a UMAP", {
 
 test_that("output object survives qs2::qs_save / qs_read round trip", {
   skip_if_not_installed("qs2")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   out <- run_cluster_pipeline(xen, panels, list(
@@ -51,7 +51,7 @@ test_that("output object survives qs2::qs_save / qs_read round trip", {
 })
 
 test_that("subpanel restriction selects only matching genes", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   out <- run_cluster_pipeline(xen, panels, list(
@@ -66,7 +66,7 @@ test_that("subpanel restriction selects only matching genes", {
 })
 
 test_that("nCount filter trims cells", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   hi <- max(xen$nCount_Xenium)
   cutoff <- as.integer(stats::median(xen$nCount_Xenium))
@@ -83,7 +83,7 @@ test_that("nCount filter trims cells", {
 test_that("Leiden falls back to Louvain when leidenAlg is missing", {
   skip_if(requireNamespace("leidenAlg", quietly = TRUE),
           "leidenAlg installed; fallback path not exercised")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   expect_warning(
     run_cluster_pipeline(xen, panels, list(

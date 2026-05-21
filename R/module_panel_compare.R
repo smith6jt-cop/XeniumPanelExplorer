@@ -70,7 +70,8 @@ panel_compare_server <- function(id, panels, app_state) {
       compute_subpanel_coverage(
         panels(), app_state$xen,
         min_detection_pct = input$min_det,
-        custom_label      = custom_panel_label(app_state$custom_panel_status)
+        custom_label      = custom_panel_label(app_state$custom_panel_status,
+                                               panels())
       )
     })
 

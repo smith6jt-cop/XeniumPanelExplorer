@@ -47,7 +47,10 @@ build_markers_csv <- function(markers_cache) {
 #' clustered object, subcluster stack, marker tables).
 render_session_report <- function(file, panels, app_state,
                                   title = "Xenium Panel Explorer — session report",
-                                  custom_label = "custom_T1D_GWAS_panel") {
+                                  custom_label = NULL) {
+  if (is.null(custom_label)) {
+    custom_label <- custom_panel_label(app_state$custom_panel_status, panels)
+  }
   ts <- format(Sys.time(), "%Y-%m-%d %H:%M:%S %Z")
 
   card <- function(title, ...) {
@@ -86,11 +89,13 @@ render_session_report <- function(file, panels, app_state,
 
   # 1. Audit overview
   s <- panels$summary
+  custom_n <- if (!is.null(panels$custom)) nrow(panels$custom) else 0L
   body <- htmltools::tagAppendChildren(body, card("Audit overview",
-    kv("Generated",       ts,
+    kv("Tissue",          panels$tissue$display_name %||% "(unknown)",
+       "Generated",       ts,
        "Subpanels",       nrow(s),
-       "5K-shared genes", nrow(panels$xenium5k),
-       sprintf("%s genes", custom_label), nrow(panels$custom),
+       "5K reference genes", nrow(panels$reference_5k),
+       sprintf("%s genes", custom_label), custom_n,
        "Excluded genes",  nrow(panels$excluded)),
     htmltools::p(htmltools::strong("Top by gene count: ")),
     df_to_html(s[order(-s$n_genes), c("subpanel","n_genes","description")],

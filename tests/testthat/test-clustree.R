@@ -1,6 +1,6 @@
 test_that("clustree() returns a ggplot from a fixture with res cols", {
   skip_if_not_installed("clustree")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   out <- run_cluster_pipeline(xen, panels, list(
@@ -13,7 +13,7 @@ test_that("clustree() returns a ggplot from a fixture with res cols", {
 })
 
 test_that("compute_stability_summary has the expected shape and ranges", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10,
@@ -38,7 +38,7 @@ test_that("compute_stability_summary has the expected shape and ranges", {
 })
 
 test_that("clustree_edge_table parses edges between adjacent resolutions", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10,

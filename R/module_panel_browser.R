@@ -1,9 +1,11 @@
-#' Panel Browser module — selectizeInput across the 49 subpanels + custom + 5K.
+#' Panel Browser module — selectizeInput across the subpanels + optional
+#' custom panel + the joined 5K audit reference.
 #'
 #' Layout: sidebar with a selectize for the primary panel, a second
 #' selectize for an optional comparison panel, a download button, and a
 #' filter for `exclude_recommended`. Main panel: a gene `DT`, a `plotly`
-#' detection-percentage scatter, and a 2-set comparison summary.
+#' detection-percentage scatter (rendered when the active tissue has at
+#' least two `reference_runs`), and a 2-set comparison summary.
 
 panel_browser_ui <- function(id) {
   ns <- shiny::NS(id)
@@ -23,11 +25,7 @@ panel_browser_ui <- function(id) {
         open = FALSE,
         bslib::accordion_panel(
           "Custom panel source",
-          shiny::p(shiny::em(
-            "Upload a CSV to replace the T1D-GWAS custom panel for this ",
-            "session. A `gene` column is required; missing canonical ",
-            "columns are filled in from the original T1D-GWAS panel and ",
-            "the xenium5k reference for any matching genes.")),
+          shiny::uiOutput(ns("custom_upload_intro")),
           shiny::fileInput(ns("custom_upload"),
                            "Replace custom panel CSV",
                            accept = c(".csv", "text/csv")),
@@ -44,12 +42,9 @@ panel_browser_ui <- function(id) {
       DT::DTOutput(ns("genes"))
     ),
     bslib::card(
-      bslib::card_header("Detection across the two reference Xenium runs"),
-      shiny::p("Each point is a gene in the primary panel. ",
-               "x = ", shiny::code("detection_pct_0041323"),
-               ", y = ", shiny::code("detection_pct_0041326"),
-               ", colour = ", shiny::code("log2_detection_ratio_326_over_323"),
-               ". Diagonal is y = x."),
+      bslib::card_header(shiny::textOutput(ns("scatter_caption"),
+                                           inline = TRUE)),
+      shiny::uiOutput(ns("scatter_help")),
       plotly::plotlyOutput(ns("scatter"), height = "420px")
     ),
     bslib::card(
@@ -69,6 +64,8 @@ shinyWidgets_or_shiny_selectize <- function(id, label, choices, multiple) {
 
 panel_browser_server <- function(id, panels, panels_default, app_state) {
   shiny::moduleServer(id, function(input, output, session) {
+
+    custom_slot <- custom_panel_slot_key()
 
     # Handle a user upload of a replacement custom-panel CSV. Enrichment
     # always uses the on-disk defaults (panels_default()), not the
@@ -100,17 +97,46 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
     shiny::observeEvent(input$custom_reset, {
       app_state$custom_panel_override <- NULL
       app_state$custom_panel_status   <- NULL
-      # Clear the fileInput so re-uploading the same file re-fires.
       shiny::updateTextInput(session, "custom_upload", value = "")
     }, ignoreInit = TRUE)
 
+    # Tissue-aware upload intro
+    output$custom_upload_intro <- shiny::renderUI({
+      p <- panels()
+      default_lbl <- p$tissue$manifest$custom_panel$display_name
+      if (is.null(default_lbl)) {
+        shiny::p(shiny::em(
+          "Upload a CSV to attach a custom panel for this session. ",
+          "A `gene` column is required. The active tissue (",
+          shiny::strong(p$tissue$display_name),
+          ") has no default custom panel; uploaded genes are enriched ",
+          "from the tissue's 5K audit table."))
+      } else {
+        shiny::p(shiny::em(
+          "Upload a CSV to replace the default custom panel (",
+          shiny::strong(default_lbl), ") for this session. ",
+          "A `gene` column is required; missing canonical columns are ",
+          "filled in from the default panel and the tissue's 5K audit ",
+          "for any matching genes."))
+      }
+    })
+
     output$custom_status <- shiny::renderUI({
       st <- app_state$custom_panel_status
+      p  <- panels()
+      default_lbl <- p$tissue$manifest$custom_panel$display_name
       if (is.null(st)) {
-        n <- nrow(panels_default()$custom %||% data.frame())
+        cust <- p$custom
+        if (is.null(cust) || nrow(cust) == 0L) {
+          return(shiny::tags$p(shiny::tags$small(
+            shiny::strong("Custom panel: "),
+            "no default for this tissue.")))
+        }
         return(shiny::tags$p(shiny::tags$small(
           shiny::strong("Custom panel: "), "default ",
-          sprintf("(%d genes)", n))))
+          if (!is.null(default_lbl)) sprintf("(%s, %d genes)",
+                                             default_lbl, nrow(cust))
+          else sprintf("(%d genes)", nrow(cust)))))
       }
       shiny::tags$div(
         shiny::tags$p(shiny::tags$small(
@@ -119,9 +145,9 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
           sprintf(" (%d genes)", st$n_genes))),
         shiny::tags$ul(
           class = "small mb-0",
-          shiny::tags$li(sprintf("%d enriched from T1D-GWAS",
+          shiny::tags$li(sprintf("%d enriched from default panel",
                                  st$n_enriched_from_custom)),
-          shiny::tags$li(sprintf("%d enriched from xenium5k",
+          shiny::tags$li(sprintf("%d enriched from 5K audit",
                                  st$n_enriched_from_5k)),
           shiny::tags$li(sprintf("%d unmatched (no reference data)",
                                  st$n_unmatched))
@@ -129,24 +155,27 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       )
     })
 
-    # Values used for lookup in `get_panel_df()`. Stable across uploads.
+    # Choices presented in the panel dropdowns. The custom slot is omitted
+    # when the active tissue has no custom panel configured AND no upload
+    # is active.
     panel_choices <- shiny::reactive({
       p <- panels()
-      c(
-        sort(p$meta$subpanel_keys),
-        "custom_T1D_GWAS_panel",
-        "xenium5k_in_audit"
-      )
+      out <- sort(p$meta$subpanel_keys)
+      has_custom <- (!is.null(p$custom) && nrow(p$custom) > 0L) ||
+                    !is.null(app_state$custom_panel_status)
+      if (has_custom) out <- c(out, custom_slot)
+      c(out, "xenium5k_in_audit")
     })
 
-    # Display labels — when an override is active the custom-panel slot
-    # shows the uploaded filename stem (matches every other UI surface).
+    # Display labels — custom slot picks up the uploaded filename or the
+    # manifest-declared display name.
     panel_choices_labeled <- shiny::reactive({
       vals <- panel_choices()
       labels <- vals
       st <- app_state$custom_panel_status
-      if (!is.null(st)) {
-        labels[vals == "custom_T1D_GWAS_panel"] <- custom_panel_label(st)
+      p  <- panels()
+      if (custom_slot %in% vals) {
+        labels[vals == custom_slot] <- custom_panel_label(st, p)
       }
       stats::setNames(vals, labels)
     })
@@ -170,12 +199,9 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
                                   selected = sel_compare)
     })
 
-    # Registered after the choices observer so it runs LAST in the flush
-    # cycle — surfaces the just-uploaded panel in the dropdown without
-    # being clobbered by the choices observer's selected-value default.
+    # When a user upload lands, jump to the custom slot.
     shiny::observeEvent(app_state$custom_panel_status, {
-      shiny::updateSelectizeInput(session, "panel",
-                                  selected = "custom_T1D_GWAS_panel")
+      shiny::updateSelectizeInput(session, "panel", selected = custom_slot)
     }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
     # External nav from Overview: a subpanel key arrives via app_state
@@ -190,8 +216,8 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
     get_panel_df <- function(key) {
       p <- panels()
       if (is.null(key) || !nzchar(key) || identical(key, "(none)")) return(NULL)
-      if (key == "custom_T1D_GWAS_panel") return(p$custom)
-      if (key == "xenium5k_in_audit")    return(p$xenium5k)
+      if (identical(key, custom_slot))     return(p$custom)
+      if (identical(key, "xenium5k_in_audit")) return(p$xenium5k)
       p$subpanels[[key]]
     }
 
@@ -215,7 +241,8 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       if (is.null(df)) return("Select a panel.")
       sprintf("%s — %d genes",
               panel_display_label(input$panel,
-                                  app_state$custom_panel_status),
+                                  app_state$custom_panel_status,
+                                  panels()),
               nrow(df))
     })
 
@@ -232,56 +259,116 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       )
     })
 
+    # Tissue-aware scatter caption / help — names the actual reference runs.
+    output$scatter_caption <- shiny::renderText({
+      runs <- panels()$reference_runs
+      if (length(runs) >= 2L) {
+        sprintf("Detection across reference Xenium runs (%s vs %s)",
+                runs[1], runs[2])
+      } else if (length(runs) == 1L) {
+        sprintf("Detection in reference Xenium run (%s)", runs[1])
+      } else {
+        "Detection across reference Xenium runs"
+      }
+    })
+
+    output$scatter_help <- shiny::renderUI({
+      runs <- panels()$reference_runs
+      if (length(runs) >= 2L) {
+        shiny::p("Each point is a gene in the primary panel. ",
+                 "x = ",
+                 shiny::code(sprintf("detection_pct_%s", runs[1])),
+                 ", y = ",
+                 shiny::code(sprintf("detection_pct_%s", runs[2])),
+                 ", colour = ",
+                 shiny::code("log2_detection_ratio"),
+                 ". Diagonal is y = x.")
+      } else if (length(runs) == 1L) {
+        shiny::p("Histogram of ",
+                 shiny::code(sprintf("detection_pct_%s", runs[1])),
+                 " across genes in the primary panel.")
+      } else {
+        shiny::p(shiny::em(
+          "The active tissue declares no reference_runs in its manifest; ",
+          "detection columns are not available."))
+      }
+    })
+
     output$scatter <- plotly::renderPlotly({
       df <- primary_df()
       shiny::req(df)
-      need <- c("detection_pct_0041323", "detection_pct_0041326")
-      if (!all(need %in% names(df))) {
-        return(plotly::plotly_empty(type = "scatter", mode = "markers") |>
-                 plotly::layout(annotations = list(list(
-                   text = "Detection columns not present for this panel.",
-                   showarrow = FALSE, x = 0.5, y = 0.5, xref = "paper",
-                   yref = "paper"))))
+      runs <- panels()$reference_runs
+
+      empty_plot <- function(msg) {
+        plotly::plotly_empty(type = "scatter", mode = "markers") |>
+          plotly::layout(annotations = list(list(
+            text = msg, showarrow = FALSE,
+            x = 0.5, y = 0.5, xref = "paper", yref = "paper")))
       }
 
-      # log10(1 + pct) so 0% is plottable; ticks at the original percent.
-      df$lx <- log10(1 + df$detection_pct_0041323)
-      df$ly <- log10(1 + df$detection_pct_0041326)
+      if (length(runs) == 0L) {
+        return(empty_plot("No reference_runs configured for this tissue."))
+      }
+
+      run_x_col <- sprintf("detection_pct_%s", runs[1])
+      run_y_col <- if (length(runs) >= 2L)
+        sprintf("detection_pct_%s", runs[2]) else NA_character_
+
+      if (!run_x_col %in% names(df) ||
+          (!is.na(run_y_col) && !run_y_col %in% names(df))) {
+        return(empty_plot("Detection columns not present for this panel."))
+      }
+
+      # Single-run fallback: histogram of the one column we have.
+      if (is.na(run_y_col)) {
+        return(plotly::plot_ly(
+          x = df[[run_x_col]], type = "histogram", nbinsx = 40
+        ) |> plotly::layout(
+          xaxis = list(title = run_x_col),
+          yaxis = list(title = "genes")))
+      }
+
+      # Two-run scatter (log10-spaced ticks; original % preserved on hover).
+      df$lx <- log10(1 + df[[run_x_col]])
+      df$ly <- log10(1 + df[[run_y_col]])
       tick_pct  <- c(0, 1, 3, 10, 30, 100)
       tick_vals <- log10(1 + tick_pct)
       tick_text <- as.character(tick_pct)
       ax_max    <- log10(101)
 
-      has_ratio <- "log2_detection_ratio_326_over_323" %in% names(df) &&
-                   any(is.finite(df$log2_detection_ratio_326_over_323))
+      ratio_col <- "log2_detection_ratio"
+      has_ratio <- ratio_col %in% names(df) &&
+                   any(is.finite(df[[ratio_col]]))
       marker <- if (has_ratio) {
-        r <- df$log2_detection_ratio_326_over_323
-        # Robust symmetric limits: 95th-pct of |ratio|, floored at 2,
-        # capped at 5 — stops one outlier from washing out the panel.
+        r <- df[[ratio_col]]
         q <- stats::quantile(abs(r), 0.95, na.rm = TRUE)
         cmax_q <- min(5, max(2, q))
         list(size = 6, color = r,
              cmin = -cmax_q, cmax = cmax_q, cmid = 0, cauto = FALSE,
              colorscale = "RdBu", reversescale = TRUE,
-             colorbar = list(title = "log2 326/323"))
+             colorbar = list(title = sprintf("log2 %s/%s",
+                                             runs[2], runs[1])))
       } else {
         list(size = 6, color = "#1f77b4")
       }
+
+      hover_text <- sprintf("%s<br>%s: %.2f%%<br>%s: %.2f%%",
+                            df$gene, runs[1], df[[run_x_col]],
+                            runs[2], df[[run_y_col]])
 
       plotly::plot_ly(
         df,
         x = ~lx, y = ~ly,
         type = "scatter", mode = "markers",
         marker = marker,
-        text = ~sprintf("%s<br>0041323: %.2f%%<br>0041326: %.2f%%",
-                        gene, detection_pct_0041323, detection_pct_0041326),
+        text   = hover_text,
         hoverinfo = "text"
       ) |>
         plotly::layout(
-          xaxis = list(title    = "detection_pct_0041323",
+          xaxis = list(title    = run_x_col,
                        tickvals = tick_vals, ticktext = tick_text,
                        range    = c(0, ax_max), zeroline = FALSE),
-          yaxis = list(title    = "detection_pct_0041326",
+          yaxis = list(title    = run_y_col,
                        tickvals = tick_vals, ticktext = tick_text,
                        range    = c(0, ax_max), zeroline = FALSE,
                        scaleanchor = "x", scaleratio = 1),
@@ -301,8 +388,9 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       both <- intersect(ga, gb)
       a_only <- setdiff(ga, gb); b_only <- setdiff(gb, ga)
       st <- app_state$custom_panel_status
-      lbl_a <- panel_display_label(input$panel,   st)
-      lbl_b <- panel_display_label(input$compare, st)
+      p  <- panels()
+      lbl_a <- panel_display_label(input$panel,   st, p)
+      lbl_b <- panel_display_label(input$compare, st, p)
       shiny::tagList(
         shiny::tags$table(
           class = "table table-sm",

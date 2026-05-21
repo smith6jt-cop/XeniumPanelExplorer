@@ -177,7 +177,8 @@ load_xenium_server <- function(id, panels, app_state) {
       if (inherits(out, "load_xenium_error") || is.null(out)) {
         return(shiny::p(shiny::em("Load a dataset to validate.")))
       }
-      rep <- panel_validate(rownames(out), panels())
+      p <- panels()
+      rep <- panel_validate(rownames(out), p)
       cls <- if (rep$pct_reference_covered >= 0.95) "alert-success"
              else if (rep$pct_reference_covered >= 0.5) "alert-warning"
              else "alert-info"
@@ -185,20 +186,21 @@ load_xenium_server <- function(id, panels, app_state) {
                  panel_validate_summary(
                    rep,
                    custom_label = custom_panel_label(
-                     app_state$custom_panel_status)))
+                     app_state$custom_panel_status, p)))
     })
 
     # Custom-panel rows whose `gene` is not in the loaded dataset.
-    # `panels()$custom` is the (possibly overridden) uploaded panel, so
-    # this works for both the default T1D-GWAS panel and any upload.
+    # `panels()$custom` is the (possibly overridden) uploaded panel; NULL
+    # for tissues without a default and no upload.
     custom_coverage <- shiny::reactive({
       shiny::req(app_state$xen)
-      cust <- panels()$custom
+      p <- panels()
+      cust <- p$custom
       if (is.null(cust) || nrow(cust) == 0L) return(NULL)
       data_genes <- rownames(app_state$xen)
       is_present <- cust$gene %in% data_genes
       list(
-        label      = custom_panel_label(app_state$custom_panel_status),
+        label      = custom_panel_label(app_state$custom_panel_status, p),
         total      = nrow(cust),
         n_present  = sum(is_present),
         n_missing  = sum(!is_present),
@@ -246,7 +248,8 @@ load_xenium_server <- function(id, panels, app_state) {
     output$dl_missing <- shiny::downloadHandler(
       filename = function() {
         lbl <- if (is.null(app_state$xen)) "custom"
-               else custom_panel_label(app_state$custom_panel_status)
+               else custom_panel_label(app_state$custom_panel_status,
+                                       panels())
         sprintf("missing_in_data_%s_%s.csv",
                 lbl, format(Sys.time(), "%Y%m%dT%H%M%S"))
       },

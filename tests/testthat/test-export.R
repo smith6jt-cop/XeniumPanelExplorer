@@ -1,5 +1,5 @@
 test_that("build_cluster_csv returns one row per cell with res cols", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = c(0.3, 0.7)
@@ -19,7 +19,7 @@ test_that("build_cluster_csv returns one row per cell with res cols", {
 })
 
 test_that("build_markers_csv concatenates with source / group_col cols", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = 0.5
@@ -34,14 +34,14 @@ test_that("build_markers_csv concatenates with source / group_col cols", {
 })
 
 test_that("build_cluster_csv errors without a clustered object", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   expect_error(build_cluster_csv(xen), "No seurat_clusters_res_")
   expect_error(build_cluster_csv(NULL), "No clustered Seurat")
 })
 
 test_that("render_session_report writes a non-empty self-contained HTML", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = 0.5
@@ -70,7 +70,7 @@ test_that("render_session_report writes a non-empty self-contained HTML", {
 })
 
 test_that("session report includes markers when the cache has entries", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
   out    <- run_cluster_pipeline(xen, panels, list(
     use_all_features = TRUE, npcs = 10, resolutions = 0.5

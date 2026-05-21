@@ -37,7 +37,7 @@ test_that("Xenium-bundle ingest reads h5 + parquet into a Seurat object", {
 })
 
 test_that("panel_validate returns the expected report shape", {
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   obj    <- make_test_seurat(panels = panels)
   rep    <- panel_validate(rownames(obj), panels)
 
@@ -45,7 +45,8 @@ test_that("panel_validate returns the expected report shape", {
                       "missing_from_data", "extra_in_data",
                       "n_intersection", "n_missing_from_data",
                       "n_extra_in_data", "pct_reference_covered",
-                      "partial"))
+                      "partial", "has_custom"))
+  expect_true(rep$has_custom)
   expect_equal(rep$n_data, 500L)
   expect_equal(rep$n_reference, 5092L)
   expect_equal(rep$n_extra_in_data, 0L)         # synthetic genes ⊂ subpanels ⊂ 5K
@@ -54,10 +55,13 @@ test_that("panel_validate returns the expected report shape", {
   expect_match(panel_validate_summary(rep), "Loaded dataset:")
 })
 
-test_that("h5ad ingest is intentionally unimplemented", {
+test_that("h5ad ingest dispatches to .load_xenium_h5ad", {
+  skip_if_not_installed("zellkonverter")
   tmp <- tempfile(fileext = ".h5ad")
   file.create(tmp)
-  expect_error(load_xenium(tmp), "h5ad ingest not implemented")
+  # Empty file => zellkonverter/rhdf5 can't open it. We only care that
+  # the dispatcher routes to the h5ad path and surfaces an error.
+  expect_error(load_xenium(tmp))
 })
 
 test_that("unknown extensions are rejected", {

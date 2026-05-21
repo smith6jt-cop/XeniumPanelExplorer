@@ -113,7 +113,8 @@ export_server <- function(id, panels, app_state) {
       content  = function(file) {
         render_session_report(
           file, panels(), app_state,
-          custom_label = custom_panel_label(app_state$custom_panel_status))
+          custom_label = custom_panel_label(app_state$custom_panel_status,
+                                            panels()))
       })
   })
 }

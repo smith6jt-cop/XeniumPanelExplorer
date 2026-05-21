@@ -60,10 +60,14 @@ demo_path_sentinel <- function() "<demo>"
 
 #' Load (or build) the demo Seurat object, with a `qs2` cache.
 #'
+#' Cache filename is keyed by tissue so swapping tissues doesn't serve a
+#' stale fixture sampled from the previous tissue's gene pool.
+#'
 #' @param panels output of [load_panels()]; passed to [make_demo_seurat()].
 #' @param cache_dir cache directory (default `app_paths$cache`).
 load_demo_xenium <- function(panels, cache_dir = app_paths$cache) {
-  cache_file <- file.path(cache_dir, "demo_xenium.qs2")
+  tid <- panels$tissue$id %||% "default"
+  cache_file <- file.path(cache_dir, sprintf("demo_xenium_%s.qs2", tid))
   if (file.exists(cache_file)) {
     obj <- qs2::qs_read(cache_file)
     attr(obj, "load_xenium_cache") <- list(hit = TRUE, file = cache_file)

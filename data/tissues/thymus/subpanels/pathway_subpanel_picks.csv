@@ -1,0 +1,30 @@
+subpanel_num,source,pathway,n_genes_in_pathway,n_in_working_pool,n_overlap_with_uncategorized,n_detect_ge_1pct,n_detect_ge_5pct,n_detect_ge_10pct
+21,HALLMARK,mTORC1 Signaling,200,94,54,74,23,5
+22,HALLMARK,p53 Pathway,200,92,49,67,16,5
+23,HALLMARK,Apoptosis,161,105,45,72,33,16
+24,HALLMARK,Hypoxia,200,98,43,58,21,9
+25,HALLMARK,PI3K/AKT/mTOR  Signaling,105,68,43,56,23,9
+26,HALLMARK,Interferon Gamma Response,200,120,37,102,35,13
+27,HALLMARK,TNF-alpha Signaling via NF-kB,200,115,37,68,22,8
+28,HALLMARK,IL-2/STAT5 Signaling,199,125,31,86,19,5
+29,REACTOME,Immune System R-HSA-168256,1943,829,388,553,206,71
+30,REACTOME,Innate Immune System R-HSA-168249,1035,418,214,304,116,38
+31,REACTOME,Cytokine Signaling In Immune System R-HSA-1280215,702,417,195,287,108,40
+32,REACTOME,GPCR Downstream Signaling R-HSA-388396,619,301,180,93,28,9
+33,REACTOME,Cell Cycle R-HSA-1640170,654,209,139,152,58,14
+34,REACTOME,Adaptive Immune System R-HSA-1280218,733,293,137,212,86,24
+35,REACTOME,Signaling By Interleukins R-HSA-449147,453,286,130,192,75,26
+36,REACTOME,Transcriptional Regulation By TP53 R-HSA-3700989,354,144,112,113,38,11
+37,REACTOME,"Cell Cycle, Mitotic R-HSA-69278",523,164,103,119,46,10
+38,REACTOME,Deubiquitination R-HSA-5688426,279,98,70,77,35,7
+39,REACTOME,MAPK Family Signaling Cascades R-HSA-5683057,318,135,66,88,36,7
+40,REACTOME,Class I MHC Mediated Antigen Processing And Presentation R-HSA-983169,378,99,65,81,29,5
+41,KEGG,PI3K-Akt signaling pathway,354,213,103,131,40,10
+42,KEGG,MAPK signaling pathway,294,180,94,113,33,7
+43,KEGG,Cytokine-cytokine receptor interaction,295,232,92,81,17,7
+44,KEGG,Chemokine signaling pathway,192,128,65,88,35,12
+45,KEGG,JAK-STAT signaling pathway,162,128,61,68,28,9
+46,KEGG,Apoptosis,142,97,55,78,17,3
+47,KEGG,mTOR signaling pathway,154,77,55,57,17,4
+48,KEGG,Ubiquitin mediated proteolysis,140,62,52,53,13,0
+49,KEGG,Cell cycle,124,79,51,55,21,4

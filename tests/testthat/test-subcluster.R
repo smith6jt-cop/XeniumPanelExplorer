@@ -1,6 +1,6 @@
 test_that("subcluster pipeline produces a Seurat ⊂ parent with res cols", {
   skip_if_not_installed("Seurat")
-  panels <- load_panels(test_panel_audit_dir())
+  panels <- test_load_panels()
   xen    <- make_test_seurat(panels = panels)
 
   parent <- run_cluster_pipeline(xen, panels, list(
