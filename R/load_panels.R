@@ -71,7 +71,12 @@ tissues_index <- function(root = app_paths$tissues_root) {
   for (d in candidates) {
     mf <- file.path(d, "manifest.yml")
     if (!file.exists(mf)) next
-    m <- tryCatch(yaml::read_yaml(mf), error = function(e) NULL)
+    m <- tryCatch(yaml::read_yaml(mf), error = function(e) {
+      warning("manifest.yml at ", mf, " failed to parse: ",
+              conditionMessage(e), "; skipping")
+      NULL
+    })
+    if (is.null(m)) next
     tid <- m$tissue_id
     if (is.null(tid) || !nzchar(tid)) {
       warning("manifest.yml at ", mf, " has no tissue_id; skipping")
@@ -220,7 +225,6 @@ load_panels <- function(tissue_id = NULL,
                         tissues_root = app_paths$tissues_root) {
 
   ref5k <- load_reference_5k(reference_5k_path)
-  shared <- load_shared_subpanels(subpanels_shared_path)
 
   tids <- available_tissues(tissues_root)
   if (is.null(tissue_id)) {
@@ -231,6 +235,13 @@ load_panels <- function(tissue_id = NULL,
          paste(tids, collapse = ", "))
   }
   tissue <- load_tissue(tissue_id, root = tissues_root)
+
+  # Tissues may opt out of the shared subpanel pool by setting
+  # `use_shared_subpanels: false` in their manifest. Default TRUE so
+  # tissues defined before this flag (e.g. pancreas) keep their behaviour.
+  use_shared <- isTRUE(tissue$manifest$use_shared_subpanels %||% TRUE)
+  shared <- if (use_shared) load_shared_subpanels(subpanels_shared_path) else
+    stats::setNames(list(), character())
 
   # Merge shared + tissue-specific subpanels (tissue wins on collision),
   # then annotate every subpanel with audit + biology columns.

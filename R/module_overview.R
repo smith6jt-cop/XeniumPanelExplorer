@@ -130,6 +130,8 @@ overview_server <- function(id, panels, app_state) {
       }
       df <- df[order(df$n_genes, decreasing = TRUE), , drop = FALSE]
       df$subpanel <- factor(df$subpanel, levels = df$subpanel)
+      if (!"description" %in% names(df)) df$description <- ""
+      df$description[is.na(df$description)] <- ""
       plotly::plot_ly(
         df,
         x      = ~n_genes,
@@ -137,7 +139,9 @@ overview_server <- function(id, panels, app_state) {
         type   = "bar",
         orientation = "h",
         hoverinfo   = "text",
-        text   = ~paste0(subpanel, " — ", n_genes, " genes<br>", description)
+        text   = ~paste0(subpanel, " — ", n_genes, " genes",
+                         ifelse(nzchar(description),
+                                paste0("<br>", description), ""))
       ) |>
         plotly::layout(
           margin = list(l = 220),
