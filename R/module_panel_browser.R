@@ -158,46 +158,74 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       )
     })
 
-    # Choices presented in the panel dropdowns. The custom slot is omitted
-    # when the active tissue has no custom panel configured AND no upload
-    # is active.
+    # Prefix used to namespace the 10x pre-designed panel keys so they
+    # don't collide with tissue subpanel filenames if someone names a
+    # subpanel "hLung".
+    ref_panel_key <- function(panel_id) paste0("ref10x:", panel_id)
+
+    # Flat vector of every selectable panel value (subpanels + custom +
+    # tissue's joined 5K audit + 10x pre-designed panels).
     panel_choices <- shiny::reactive({
       p <- panels()
       out <- sort(p$meta$subpanel_keys)
       has_custom <- (!is.null(p$custom) && nrow(p$custom) > 0L) ||
                     !is.null(app_state$custom_panel_status)
       if (has_custom) out <- c(out, custom_slot)
-      c(out, "xenium5k_in_audit")
+      out <- c(out, "xenium5k_in_audit")
+      mf <- p$reference_panels_manifest
+      if (!is.null(mf) && nrow(mf)) {
+        out <- c(out, ref_panel_key(mf$panel_id))
+      }
+      out
     })
 
-    # Display labels — custom slot picks up the uploaded filename or the
-    # manifest-declared display name.
-    panel_choices_labeled <- shiny::reactive({
-      vals <- panel_choices()
-      labels <- vals
+    # Optgroup-structured choices for the selectize dropdown:
+    #   "Tissue subpanels"        -> sorted subpanel keys
+    #   "Custom panel"            -> the (renamed) custom slot
+    #   "Tissue 5K audit"         -> xenium5k_in_audit
+    #   "10x pre-designed panels" -> hLung, hBrain, ... labeled by display_name
+    panel_choices_grouped <- shiny::reactive({
+      p <- panels()
       st <- app_state$custom_panel_status
-      p  <- panels()
-      if (custom_slot %in% vals) {
-        labels[vals == custom_slot] <- custom_panel_label(st, p)
+      groups <- list()
+      subp_keys <- sort(p$meta$subpanel_keys)
+      if (length(subp_keys)) {
+        groups[["Tissue subpanels"]] <- stats::setNames(subp_keys, subp_keys)
       }
-      stats::setNames(vals, labels)
+      has_custom <- (!is.null(p$custom) && nrow(p$custom) > 0L) ||
+                    !is.null(st)
+      if (has_custom) {
+        groups[["Custom panel"]] <- stats::setNames(custom_slot,
+                                                    custom_panel_label(st, p))
+      }
+      groups[["Tissue 5K audit"]] <- c("xenium5k_in_audit" = "xenium5k_in_audit")
+      mf <- p$reference_panels_manifest
+      if (!is.null(mf) && nrow(mf)) {
+        vals   <- ref_panel_key(mf$panel_id)
+        labels <- sprintf("%s (%s, %d genes)",
+                          mf$display_name, mf$species, mf$n_genes)
+        groups[["10x pre-designed panels"]] <- stats::setNames(vals, labels)
+      }
+      groups
     })
 
     shiny::observe({
-      ch <- panel_choices_labeled()
+      grouped <- panel_choices_grouped()
+      flat    <- panel_choices()
       cur_panel   <- shiny::isolate(input$panel)
       cur_compare <- shiny::isolate(input$compare)
-      sel_panel <- if (!is.null(cur_panel) && cur_panel %in% ch) cur_panel
-                   else unname(ch)[1]
+      sel_panel <- if (!is.null(cur_panel) && cur_panel %in% flat) cur_panel
+                   else flat[1]
       sel_compare <- if (!is.null(cur_compare) &&
-                         (cur_compare %in% ch || cur_compare == "(none)"))
+                         (cur_compare %in% flat || cur_compare == "(none)"))
                        cur_compare else "(none)"
       shiny::updateSelectizeInput(session, "panel",
-                                  choices = ch,
+                                  choices = grouped,
                                   server  = TRUE,
                                   selected = sel_panel)
       shiny::updateSelectizeInput(session, "compare",
-                                  choices = c("(none)" = "(none)", ch),
+                                  choices = c(list(`(none)` = c("(none)" = "(none)")),
+                                              grouped),
                                   server  = TRUE,
                                   selected = sel_compare)
     })
@@ -221,6 +249,10 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       if (is.null(key) || !nzchar(key) || identical(key, "(none)")) return(NULL)
       if (identical(key, custom_slot))     return(p$custom)
       if (identical(key, "xenium5k_in_audit")) return(p$xenium5k)
+      if (startsWith(key, "ref10x:")) {
+        pid <- sub("^ref10x:", "", key)
+        return(p$reference_panels[[pid]])
+      }
       p$subpanels[[key]]
     }
 

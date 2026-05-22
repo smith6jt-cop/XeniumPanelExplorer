@@ -118,6 +118,22 @@ The first run takes ~10–15 minutes for source builds (Seurat, harmony,
 arrow, rhdf5, clustree and their transitive deps). Subsequent restores
 are seconds when the renv cache is warm.
 
+### 10x pre-designed panel data
+
+The Panel Browser compares your tissue subpanels against 10x Genomics'
+public pre-designed Xenium panels. Fetch them once with:
+
+```bash
+Rscript scripts/fetch_10x_panels.R
+```
+
+This writes 11 CSVs (Human Lung / Brain / Breast / Colon / Skin /
+Multi-Tissue / Immuno-Oncology / Prime 5K, plus Mouse Brain / Tissue
+Atlas / Prime 5K) into `data/reference_panels/` and a `manifest.csv`
+indexing them. The fetched files are checked into the repo so a fresh
+clone has the panels available; re-run the script to pick up 10x's
+revisions.
+
 ### Startup environment check
 
 The app runs `check_environment()` at session start and prints any
@@ -195,10 +211,15 @@ When to use it: orientation. If you're new to the audit, sort by
 The deep-dive browser for any single subpanel.
 
 **Sidebar**
-- **Primary panel** — selectize across all 49 subpanels, the three
-  uncategorized residuals (`99`, `99c`, `99d`), `custom_T1D_GWAS_panel`
-  (the 100 add-on genes), and `xenium5k_in_audit` (the full 4,992 5K
-  reference).
+- **Primary panel** — selectize across the active tissue's subpanels,
+  the three uncategorized residuals (`99`, `99c`, `99d`), the tissue's
+  custom panel (e.g. `T1D-GWAS custom 100`), `xenium5k_in_audit` (the
+  joined audit reference), and 10x Genomics' eleven pre-designed Xenium
+  panels (Lung, Brain, Breast, Colon, Skin, Multi-Tissue & Cancer,
+  Immuno-Oncology, Mouse Brain, Mouse Tissue Atlas, and the Human /
+  Mouse Prime 5K Pan-Tissue panels). The 10x panels are grouped under
+  a "10x pre-designed panels" optgroup. Their gene lists are fetched
+  by `scripts/fetch_10x_panels.R` (see Installation below).
 - **Compare with (optional)** — pick a second panel to overlay.
 - **Hide genes with `exclude_recommended = yes`** — subpanels carry the
   audit's `exclude_recommended` flag; checking this filters them out

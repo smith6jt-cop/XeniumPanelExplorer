@@ -44,6 +44,41 @@ load_reference_5k <- function(path = app_paths$reference_5k) {
   .read_csv(f)
 }
 
+#' Read the 10x pre-designed Xenium panels (Lung, Brain, Multi-Tissue, ...).
+#'
+#' Sourced by `scripts/fetch_10x_panels.R`. Each panel lives at
+#' `<path>/<panel_id>.csv` with a `gene` column; metadata (display name,
+#' species, tissue, n_genes, source URL) lives in `<path>/manifest.csv`.
+#'
+#' @return list(manifest = data.frame, panels = named list of data.frames).
+#'   Both are empty if the directory or manifest is absent.
+load_reference_panels <- function(path = app_paths$reference_panels) {
+  empty <- list(
+    manifest = data.frame(panel_id = character(), display_name = character(),
+                          species = character(), tissue = character(),
+                          n_genes = integer(), file = character(),
+                          source_url = character(),
+                          stringsAsFactors = FALSE),
+    panels = stats::setNames(list(), character())
+  )
+  if (!dir.exists(path)) return(empty)
+  mf <- file.path(path, "manifest.csv")
+  if (!file.exists(mf)) return(empty)
+  manifest <- .read_csv(mf)
+  if (!nrow(manifest) || !"panel_id" %in% names(manifest)) return(empty)
+  panels <- stats::setNames(
+    lapply(seq_len(nrow(manifest)), function(i) {
+      fp <- file.path(path, manifest$file[i])
+      if (!file.exists(fp)) return(NULL)
+      .read_csv(fp)
+    }),
+    manifest$panel_id
+  )
+  # Drop any panel whose CSV was missing.
+  keep <- !vapply(panels, is.null, logical(1))
+  list(manifest = manifest[keep, , drop = FALSE], panels = panels[keep])
+}
+
 #' Read tissue-agnostic subpanel definitions.
 #' @return named list of data.frames keyed by file stem.
 load_shared_subpanels <- function(path = app_paths$subpanels_shared) {
@@ -221,10 +256,12 @@ audit_detection_cols <- function(reference_runs) {
 #' Plus tissue-aware keys: tissue (id + manifest), reference_5k, reference_runs.
 load_panels <- function(tissue_id = NULL,
                         reference_5k_path = app_paths$reference_5k,
+                        reference_panels_path = app_paths$reference_panels,
                         subpanels_shared_path = app_paths$subpanels_shared,
                         tissues_root = app_paths$tissues_root) {
 
   ref5k <- load_reference_5k(reference_5k_path)
+  refp  <- load_reference_panels(reference_panels_path)
 
   tids <- available_tissues(tissues_root)
   if (is.null(tissue_id)) {
@@ -276,6 +313,8 @@ load_panels <- function(tissue_id = NULL,
     excluded       = tissue$excluded,
     hIO            = tissue$hIO,
     reference_5k   = ref5k,
+    reference_panels          = refp$panels,
+    reference_panels_manifest = refp$manifest,
     reference_runs = as.character(tissue$manifest$reference_runs %||% character()),
     tissue         = list(
       id           = tissue_id,
@@ -331,11 +370,24 @@ custom_panel_label <- function(status, panels = NULL) {
 
 #' Pass-through display-label mapper for any panel key.
 #'
-#' Only the custom-panel slot is rewritten; every other key is returned
-#' as-is.
+#' Rewrites:
+#'   * the custom-panel slot   -> uploaded filename or manifest display name
+#'   * a `ref10x:<panel_id>` key -> the 10x panel's display name (from
+#'                                  `panels$reference_panels_manifest`)
+#' Every other key is returned as-is.
 panel_display_label <- function(key, status, panels = NULL) {
   if (identical(key, custom_panel_slot_key())) {
     return(custom_panel_label(status, panels))
+  }
+  if (is.character(key) && length(key) == 1L && startsWith(key, "ref10x:") &&
+      !is.null(panels)) {
+    pid <- sub("^ref10x:", "", key)
+    mf  <- panels$reference_panels_manifest
+    if (!is.null(mf) && nrow(mf)) {
+      hit <- which(mf$panel_id == pid)
+      if (length(hit)) return(mf$display_name[hit[1]])
+    }
+    return(pid)
   }
   key
 }

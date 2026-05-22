@@ -5,6 +5,9 @@
 app_paths <- list(
   # Constant — the 10x Xenium Prime 5K Human Pan-Tissue gene list.
   reference_5k     = "data/reference_5k",
+  # 10x's other pre-designed Xenium panels (hLung, hBrain, hIO, etc.);
+  # populated by scripts/fetch_10x_panels.R.
+  reference_panels = "data/reference_panels",
   # Tissue-agnostic subpanel biology definitions (no detection_pct etc).
   subpanels_shared = "data/subpanels_shared",
   # Per-tissue inputs (subpanels, audit, optional custom panel).
