@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435
+gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio
 ABCB1,,,no,True,ENSG00000085563,ATP-dependent translocase ABCB1 (ATP-binding cassette sub-family B member 1) (Multidrug resistance protein 1),Cell membrane,renal principal cell;cardiac endothelial cell,,0.968,1.187,1.187,4493,2870,0.295
 ABCC9,,,no,True,ENSG00000069431,ATP-binding cassette sub-family C member 9 (Sulfonylurea receptor 2),Membrane,capillary endothelial cell;pancreatic PP cell;ciliary muscle cell;pericyte;mural cell,,0.776,1.155,1.155,3600,2791,0.574
 ABCG2,,,no,True,ENSG00000118777,Broad substrate specificity ATP-binding cassette transporter ABCG2,Cell membrane,prostate gland microvascular endothelial cell;cerebral cortex endothelial cell,,0.227,0.145,0.227,1053,350,-0.648

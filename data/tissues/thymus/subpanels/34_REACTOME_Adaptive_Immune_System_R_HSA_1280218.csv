@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435,pathway_source,pathway_term,was_uncategorized
+gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio,pathway_source,pathway_term,was_uncategorized
 AKT1,,,no,ENSG00000142208,RAC-alpha serine/threonine-protein kinase,Cytoplasm,,,4.956,3.876,4.956,23000,9367,-0.355,REACTOME,Adaptive Immune System R-HSA-1280218,True
 AKT2,,,no,ENSG00000105221,RAC-beta serine/threonine-protein kinase,Cytoplasm;Nucleus;Cell membrane,,,11.782,8.423,11.782,54677,20357,-0.484,REACTOME,Adaptive Immune System R-HSA-1280218,True
 AKT3,,,no,ENSG00000117020,RAC-gamma serine/threonine-protein kinase,Nucleus,,,3.288,3.692,3.692,15260,8923,0.167,REACTOME,Adaptive Immune System R-HSA-1280218,True

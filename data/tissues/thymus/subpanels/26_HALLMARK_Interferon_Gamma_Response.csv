@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435,pathway_source,pathway_term,was_uncategorized
+gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio,pathway_source,pathway_term,was_uncategorized
 ADAR,,,no,ENSG00000160710,Double-stranded RNA-specific adenosine deaminase (DRADA),Cytoplasm,epithelial cell;endothelial cell;endothelial cell of vascular tree;IgA plasmablast,,14.564,11.289,14.564,67589,27283,-0.368,HALLMARK,Interferon Gamma Response,False
 APOL6,,,no,ENSG00000221963,Apolipoprotein L6 (Apolipoprotein L-VI) (ApoL-VI),Cytoplasm,respiratory epithelial cell;epithelial cell of lower respiratory tract;club cell,,5.999,4.737,5.999,27842,11448,-0.341,HALLMARK,Interferon Gamma Response,False
 B2M,,,no,,,,,,63.118,52.943,63.118,292926,127957,-0.254,HALLMARK,Interferon Gamma Response,False

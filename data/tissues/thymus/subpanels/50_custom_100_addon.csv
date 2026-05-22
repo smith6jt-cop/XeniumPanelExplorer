@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435
+gene,category,rationale,exclude_recommended,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio
 ACOXL,,,no,,,,,,0.285,0.287,0.287,1321,693,0.011
 ACTA2,,,no,,,,,,2.811,2.156,2.811,13046,5212,-0.382
 ADCY3,,,no,,,,,,8.191,4.7,8.191,38016,11359,-0.802

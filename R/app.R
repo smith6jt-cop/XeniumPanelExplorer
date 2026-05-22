@@ -97,17 +97,6 @@ xenium_panel_app <- function() {
         app_state$custom_panel_override <- NULL
         app_state$custom_panel_status   <- NULL
       }
-      p <- tryCatch(panels_default(), error = function(e) NULL)
-      if (!is.null(p)) {
-        shinyWidgets::sendSweetAlert(
-          session    = session,
-          title      = sprintf("Switched to %s", p$tissue$display_name),
-          text       = sprintf("%d subpanels indexed; %d audit-annotated genes.",
-                               length(p$subpanels), nrow(p$xenium5k)),
-          type       = "info",
-          btn_labels = "OK"
-        )
-      }
     }, ignoreInit = TRUE, ignoreNULL = TRUE)
 
     overview_server("overview",          panels, app_state)

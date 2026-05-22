@@ -30,3 +30,6 @@ CLAUDE_CODE_ENV.md
 *.r46-backup
 .Rprofile.r46-backup
 renv.lock.r46-backup
+files.zip
+scripts
+scripts/*

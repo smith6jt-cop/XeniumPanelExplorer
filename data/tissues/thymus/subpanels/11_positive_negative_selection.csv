@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435
+gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio
 AIRE,,,no,True,ENSG00000160224,Autoimmune regulator (Autoimmune polyendocrinopathy candidiasis ectodermal dystrophy protein) (APECED protein),Nucleus,medullary thymic epithelial cell,,1.029,0.641,1.029,4777,1549,-0.684
 B2M,,,no,False,,,,,,63.118,52.943,63.118,292926,127957,-0.254
 BAD,,,no,True,ENSG00000002330,Bcl2-associated agonist of cell death (BAD) (Bcl-2-binding component 6) (Bcl-2-like protein 8) (Bcl2-L-8) (Bcl-xL/Bcl-2-associated death promoter) (Bcl2 antagonist of cell death),Mitochondrion outer membrane;Cytoplasm,,,1.013,0.479,1.013,4702,1158,-1.08

@@ -1,4 +1,4 @@
-gene,category,rationale,single_gene_panel_note,exclude_recommended,detection_pct_0041435,detection_pct_0041534,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435
+gene,category,rationale,single_gene_panel_note,exclude_recommended,detection_pct_0041435,detection_pct_0041534,n_cells_0041435,n_cells_0041534,log2_detection_ratio
 A2ML1,,,,no,2.053,1.472,9529,3557,-0.48
 AAMP,,,,no,5.934,3.543,27538,8562,-0.744
 AAR2,,,,no,1.141,1.117,5297,2700,-0.031

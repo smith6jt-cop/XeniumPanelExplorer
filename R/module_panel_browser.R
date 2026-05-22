@@ -19,6 +19,9 @@ panel_browser_ui <- function(id) {
       shiny::checkboxInput(ns("hide_excluded"),
                            "Hide genes with exclude_recommended = yes",
                            value = FALSE),
+      shiny::checkboxInput(ns("show_gene_labels"),
+                           "Label genes on scatter (line + name)",
+                           value = FALSE),
       shiny::p(shiny::strong("Tip: "),
                "select two panels to see set-overlap stats below the table."),
       bslib::accordion(
@@ -275,14 +278,21 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
     output$scatter_help <- shiny::renderUI({
       runs <- panels()$reference_runs
       if (length(runs) >= 2L) {
-        shiny::p("Each point is a gene in the primary panel. ",
-                 "x = ",
-                 shiny::code(sprintf("detection_pct_%s", runs[1])),
-                 ", y = ",
-                 shiny::code(sprintf("detection_pct_%s", runs[2])),
-                 ", colour = ",
-                 shiny::code("log2_detection_ratio"),
-                 ". Diagonal is y = x.")
+        shiny::tagList(
+          shiny::p("Each point is a gene in the primary panel. ",
+                   "x = ",
+                   shiny::code(sprintf("detection_pct_%s", runs[1])),
+                   ", y = ",
+                   shiny::code(sprintf("detection_pct_%s", runs[2])),
+                   ", colour = ",
+                   shiny::code("log2_detection_ratio"),
+                   ". Diagonal is y = x."),
+          shiny::p(shiny::em("Hover over a point to see the gene name ",
+                             "and per-run detection %. Toggle ",
+                             shiny::strong("Label genes on scatter"),
+                             " in the sidebar to print gene names next ",
+                             "to each point."))
+        )
       } else if (length(runs) == 1L) {
         shiny::p("Histogram of ",
                  shiny::code(sprintf("detection_pct_%s", runs[1])),
@@ -356,7 +366,7 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
                             df$gene, runs[1], df[[run_x_col]],
                             runs[2], df[[run_y_col]])
 
-      plotly::plot_ly(
+      fig <- plotly::plot_ly(
         df,
         x = ~lx, y = ~ly,
         type = "scatter", mode = "markers",
@@ -376,6 +386,50 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
                              x0 = 0, y0 = 0, x1 = ax_max, y1 = ax_max,
                              line = list(dash = "dot", color = "gray")))
         )
+
+      if (isTRUE(input$show_gene_labels) && nrow(df) > 0L) {
+        # Plotly slows to a crawl past a few hundred annotations; cap at
+        # 300 most-detectable genes (max of the two runs) so toggling the
+        # label on for the full 5K panel doesn't freeze the browser.
+        label_cap <- 300L
+        sub <- df
+        if (nrow(sub) > label_cap) {
+          ord <- order(pmax(sub[[run_x_col]], sub[[run_y_col]]),
+                       decreasing = TRUE)
+          sub <- sub[ord[seq_len(label_cap)], , drop = FALSE]
+        }
+        # Fan labels out across four horizontal tracks: assigning by
+        # y-rank so vertically-adjacent labels always land in different
+        # tracks instead of stacking on top of each other. A tiny
+        # vertical jitter further separates labels that fall into the
+        # same track at nearby y.
+        n_sub <- nrow(sub)
+        y_rank <- integer(n_sub)
+        y_rank[order(sub$ly)] <- seq_len(n_sub)
+        track  <- (y_rank - 1L) %% 4L
+        xoff_tracks <- c(160, 70, -70, -160)
+        yoff_tracks <- c(-8,  4, -4,  8)
+        xoff <- xoff_tracks[track + 1L]
+        yoff <- yoff_tracks[track + 1L]
+        fig <- fig |> plotly::add_annotations(
+          x          = sub$lx,
+          y          = sub$ly,
+          text       = sub$gene,
+          showarrow  = TRUE,
+          arrowhead  = 1,
+          arrowsize  = 0.5,
+          arrowwidth = 0.5,
+          arrowcolor = "rgba(80,80,80,0.55)",
+          ax         = xoff,
+          ay         = yoff,
+          font       = list(size = 9, color = "#333"),
+          standoff   = 3,
+          bgcolor    = "rgba(255,255,255,0.75)",
+          borderpad  = 1
+        )
+      }
+
+      fig
     })
 
     output$compare_summary <- shiny::renderUI({

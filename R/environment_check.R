@@ -14,9 +14,6 @@
 #'         5K panel — the only file the app refuses to start without)
 #'         and at least one tissue with a `manifest.yml` under
 #'         `data/tissues/`.
-#'   \item Optional probes (warnings only): `chromote::find_chrome()`
-#'         resolves a Chrome binary (needed by the shinytest2
-#'         end-to-end test, never by the running app).
 #' }
 #'
 #' @param required character vector of R packages to require.
@@ -62,14 +59,6 @@ check_environment <- function(
     warnings <- c(warnings, sprintf(
       "No tissues with a manifest.yml under %s. Drop a tissue tree in to enable analysis.",
       app_paths$tissues_root))
-  }
-
-  if (requireNamespace("chromote", quietly = TRUE)) {
-    chrome <- tryCatch(chromote::find_chrome(), error = function(e) "")
-    if (!nzchar(chrome %||% "")) {
-      warnings <- c(warnings,
-        "chromote couldn't find a Chrome binary; the shinytest2 end-to-end test will be skipped.")
-    }
   }
 
   list(errors = errors, warnings = warnings)

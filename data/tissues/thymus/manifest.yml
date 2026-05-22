@@ -1,6 +1,8 @@
 tissue_id: thymus
 display_name: "Human Thymus"
-reference_runs: []
+reference_runs:
+  - "0041435"
+  - "0041534"
 use_shared_subpanels: false
 custom_panel:
   file: custom_panel.csv
@@ -9,8 +11,4 @@ notes: |
   Audit columns: detection_pct_<run>, n_cells_<run>,
   log2_detection_ratio (between first two reference_runs),
   exclude_recommended.
-
-  Stub tissue. Drop tissue-specific subpanels under subpanels/,
-  a 5K audit table at audit/xenium5k_audit.csv, then add
-  reference_runs to enable the detection scatter plot.
 

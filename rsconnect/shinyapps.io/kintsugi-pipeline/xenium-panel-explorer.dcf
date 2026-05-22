@@ -5,6 +5,6 @@ account: kintsugi-pipeline
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 17275438
-bundleId: 11935298
+bundleId: 12029173
 url: https://kintsugi-pipeline.shinyapps.io/xenium-panel-explorer/
 version: 1

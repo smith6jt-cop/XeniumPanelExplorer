@@ -1,4 +1,4 @@
-gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio_0041534_over_0041435
+gene,category,rationale,exclude_recommended,in_5K_reference,gene_id,full_name,location,cell_type,cellchat_pathway,detection_pct_0041435,detection_pct_0041534,det_max,n_cells_0041435,n_cells_0041534,log2_detection_ratio
 A2ML1,,,no,True,ENSG00000166535,Alpha-2-macroglobulin-like protein 1 (C3 and PZP-like alpha-2-macroglobulin domain-containing protein 9),Secreted,stem cell;basal cell;epithelial cell of stratum germinativum of esophagus;keratinocyte;stratified epithelial cell;epidermal cell,,2.053,1.472,2.053,9529,3557,-0.48
 AAMP,,,no,True,ENSG00000127837,Angio-associated migratory cell protein,Cell membrane;Cytoplasm,pancreatic A cell,,5.934,3.543,5.934,27538,8562,-0.744
 AAR2,,,no,True,ENSG00000131043,Protein AAR2 homolog (AAR2 splicing factor homolog),,,,1.141,1.117,1.141,5297,2700,-0.031
