@@ -202,9 +202,11 @@ panel_browser_server <- function(id, panels, panels_default, app_state) {
       mf <- p$reference_panels_manifest
       if (!is.null(mf) && nrow(mf)) {
         vals   <- ref_panel_key(mf$panel_id)
-        labels <- sprintf("%s (%s, %d genes)",
-                          mf$display_name, mf$species, mf$n_genes)
-        groups[["10x pre-designed panels"]] <- stats::setNames(vals, labels)
+        species_tag <- ifelse(is.na(mf$species) | !nzchar(mf$species),
+                              "", paste0(mf$species, ", "))
+        labels <- sprintf("%s (%s%d genes)",
+                          mf$display_name, species_tag, mf$n_genes)
+        groups[["Reference panels"]] <- stats::setNames(vals, labels)
       }
       groups
     })

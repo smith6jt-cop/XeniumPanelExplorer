@@ -44,39 +44,100 @@ load_reference_5k <- function(path = app_paths$reference_5k) {
   .read_csv(f)
 }
 
-#' Read the 10x pre-designed Xenium panels (Lung, Brain, Multi-Tissue, ...).
+#' Normalize a reference-panel CSV to a `gene`-keyed data.frame.
 #'
-#' Sourced by `scripts/fetch_10x_panels.R`. Each panel lives at
-#' `<path>/<panel_id>.csv` with a `gene` column; metadata (display name,
-#' species, tissue, n_genes, source URL) lives in `<path>/manifest.csv`.
+#' 10x panel CSVs ship with various spellings (`Genes`, `Gene`,
+#' `gene_name`); user drop-ins can use anything. Renames the first
+#' matching column to `gene`, trims whitespace, drops blanks/dupes.
+.normalize_reference_panel_df <- function(df) {
+  if (!ncol(df)) return(df)
+  gene_col <- intersect(c("gene", "Gene", "Genes", "gene_name"), names(df))
+  if (!length(gene_col)) gene_col <- names(df)[1]
+  if (gene_col[1] != "gene") names(df)[names(df) == gene_col[1]] <- "gene"
+  df$gene <- trimws(as.character(df$gene))
+  df <- df[!is.na(df$gene) & nzchar(df$gene), , drop = FALSE]
+  df[!duplicated(df$gene), , drop = FALSE]
+}
+
+#' Read the 10x pre-designed Xenium panels and any user-dropped panels.
+#'
+#' `scripts/fetch_10x_panels.R` writes a `manifest.csv` enumerating the
+#' panels it fetched with display name, species, tissue, gene count, and
+#' source URL. This loader is lenient: it scans the directory for every
+#' `*.csv` (other than the manifest), and any file not covered by the
+#' manifest is registered with filename-stem metadata so a user can drop
+#' in their own panel CSV and it appears in the dropdowns alongside the
+#' canonical 10x panels.
 #'
 #' @return list(manifest = data.frame, panels = named list of data.frames).
-#'   Both are empty if the directory or manifest is absent.
+#'   Both are empty if the directory is absent.
 load_reference_panels <- function(path = app_paths$reference_panels) {
-  empty <- list(
-    manifest = data.frame(panel_id = character(), display_name = character(),
-                          species = character(), tissue = character(),
-                          n_genes = integer(), file = character(),
-                          source_url = character(),
-                          stringsAsFactors = FALSE),
-    panels = stats::setNames(list(), character())
+  empty_manifest <- data.frame(
+    panel_id = character(), display_name = character(),
+    species = character(), tissue = character(),
+    n_genes = integer(), file = character(),
+    source_url = character(), stringsAsFactors = FALSE
   )
+  empty <- list(manifest = empty_manifest,
+                panels = stats::setNames(list(), character()))
   if (!dir.exists(path)) return(empty)
-  mf <- file.path(path, "manifest.csv")
-  if (!file.exists(mf)) return(empty)
-  manifest <- .read_csv(mf)
-  if (!nrow(manifest) || !"panel_id" %in% names(manifest)) return(empty)
+
+  mf_path <- file.path(path, "manifest.csv")
+  manifest <- if (file.exists(mf_path)) {
+    m <- .read_csv(mf_path)
+    if (!nrow(m) || !"panel_id" %in% names(m)) empty_manifest else m
+  } else empty_manifest
+  # Backfill any optional columns so downstream code can rely on the shape.
+  for (col in c("display_name", "species", "tissue", "source_url")) {
+    if (!col %in% names(manifest)) manifest[[col]] <- NA_character_
+  }
+  if (!"n_genes" %in% names(manifest)) manifest$n_genes <- NA_integer_
+  if (!"file"    %in% names(manifest)) manifest$file    <- NA_character_
+
+  csvs <- list.files(path, pattern = "\\.csv$", full.names = FALSE)
+  csvs <- setdiff(csvs, "manifest.csv")
+  known <- !is.na(manifest$file) & manifest$file %in% csvs
+  manifest <- manifest[known, , drop = FALSE]
+
+  # Build manifest rows for any CSV that exists but isn't yet listed.
+  extras <- setdiff(csvs, manifest$file)
+  if (length(extras)) {
+    add <- data.frame(
+      panel_id     = sub("\\.csv$", "", extras),
+      display_name = sub("\\.csv$", "", extras),
+      species      = NA_character_,
+      tissue       = NA_character_,
+      n_genes      = NA_integer_,
+      file         = extras,
+      source_url   = NA_character_,
+      stringsAsFactors = FALSE
+    )
+    manifest <- rbind(manifest, add[, names(manifest), drop = FALSE])
+  }
+
+  if (!nrow(manifest)) return(empty)
+
   panels <- stats::setNames(
     lapply(seq_len(nrow(manifest)), function(i) {
       fp <- file.path(path, manifest$file[i])
       if (!file.exists(fp)) return(NULL)
-      .read_csv(fp)
+      .normalize_reference_panel_df(.read_csv(fp))
     }),
     manifest$panel_id
   )
-  # Drop any panel whose CSV was missing.
   keep <- !vapply(panels, is.null, logical(1))
-  list(manifest = manifest[keep, , drop = FALSE], panels = panels[keep])
+  manifest <- manifest[keep, , drop = FALSE]
+  panels   <- panels[keep]
+
+  # Fill in missing n_genes from the actual file contents.
+  needs_count <- is.na(manifest$n_genes) | manifest$n_genes <= 0L
+  if (any(needs_count)) {
+    manifest$n_genes[needs_count] <- vapply(
+      panels[needs_count], nrow, integer(1)
+    )
+  }
+
+  list(manifest = manifest, panels = panels)
 }
 
 #' Read tissue-agnostic subpanel definitions.
