@@ -5,11 +5,12 @@
 # (e.g. by the Xenium_Analysis phenotyping repo) — not only after the app's
 # load-time joins.
 #
-# The pancreas subpanels currently live "thin" on disk: the shared pool
-# (data/subpanels_shared/) and the four pancreas-specific files carry only
-# gene,category,rationale,single_gene_panel_note. Biology + detection columns
-# are merged at runtime by R/load_panels.R, so an external reader sees none of
-# them. This script bakes them in, mirroring the thymus per-category schemas:
+# The source gene lists are "thin": the shared pool (data/subpanels_shared/) and
+# the four pancreas-specific files carry only gene,category,rationale,
+# single_gene_panel_note; biology + detection are otherwise merged at runtime by
+# R/load_panels.R, so an external reader of those raw files sees none of them.
+# This script reads the thin gene lists and writes self-contained "fat" CSVs into
+# data/tissues/pancreas/subpanels/, mirroring the thymus per-category schemas:
 #
 #   cell-type (01-20):  gene,category,rationale,exclude_recommended,
 #                       in_5K_reference,<5 biology>,detection_pct_<r1>,
@@ -29,8 +30,9 @@
 # table, the pancreas audit table, and the reannotated residual. Run from the
 # repository root:  Rscript scripts/build_pancreas_fat_subpanels.R
 #
-# After running, flip use_shared_subpanels: false in the pancreas manifest so
-# the app reads these tissue-local files too (one canonical set).
+# The pancreas manifest already sets use_shared_subpanels: false so the app reads
+# these tissue-local files (one canonical set); a new tissue adopting this layout
+# must set the same flag.
 
 suppressPackageStartupMessages(library(data.table))
 
@@ -179,31 +181,53 @@ shared_numbered <- shared_files[grepl("^[0-9]{2}_", basename(shared_files)) &
 numbered_paths  <- c(shared_numbered,
                      file.path(panc_dir, paste0(pancreas_specific, ".csv")))
 
-report <- list()
-
+# Read every source once, run the note guard, and classify it. Defer all writes
+# until after the 5K-only invariant is validated below.
+sources <- list()
 for (p in numbered_paths) {
   stem <- sub("\\.csv$", "", basename(p))
   df   <- read_csv(p); guard_note(df, stem)
   num  <- as.integer(sub("_.*", "", stem))
-  term <- sub("^[0-9]+_", "", stem)
-  out  <- if (num <= 20L) build_celltype(df) else build_pathway(df, term)
-  write_csv(out, file.path(panc_dir, paste0(stem, ".csv")))
-  report[[stem]] <- data.frame(subpanel = stem, n_genes = nrow(out),
-                               n_non5k = sum(!(df$gene %in% ref5k$gene)),
-                               schema = if (num <= 20L) "celltype" else "pathway",
-                               stringsAsFactors = FALSE)
+  sources[[stem]] <- list(df = df,
+                          kind = if (num <= 20L) "celltype" else "pathway",
+                          term = sub("^[0-9]+_", "", stem))
 }
-
 for (stem in residual_stems) {
-  p   <- file.path(shared_dir, paste0(stem, ".csv"))
-  df  <- read_csv(p); guard_note(df, stem)
-  out <- build_residual(df)
-  write_csv(out, file.path(panc_dir, paste0(stem, ".csv")))
-  report[[stem]] <- data.frame(subpanel = stem, n_genes = nrow(out),
-                               n_non5k = sum(!(df$gene %in% ref5k$gene)),
-                               schema = "residual", stringsAsFactors = FALSE)
+  df <- read_csv(file.path(shared_dir, paste0(stem, ".csv")))
+  guard_note(df, stem)
+  sources[[stem]] <- list(df = df, kind = "residual", term = NA_character_)
 }
 
+# Fail fast: 5K-only membership is a hard invariant for these subpanels (the PR
+# and downstream consumers treat it as a guarantee). Refuse to write anything if
+# a source carries a gene outside the 5K reference.
+offenders <- do.call(rbind, lapply(names(sources), function(stem) {
+  bad <- setdiff(sources[[stem]]$df$gene, ref5k$gene)
+  if (length(bad)) {
+    data.frame(subpanel = stem, n_non5k = length(bad),
+               examples = paste(utils::head(bad, 5L), collapse = ";"),
+               stringsAsFactors = FALSE)
+  }
+}))
+if (!is.null(offenders) && nrow(offenders)) {
+  cat("\n[FAIL] subpanel genes NOT in the 5K reference (5K-only invariant):\n")
+  print(offenders, row.names = FALSE)
+  stop(sum(offenders$n_non5k), " subpanel gene(s) are not in the 5K reference; ",
+       "refusing to write fat subpanels. Fix the source gene lists first.")
+}
+
+# Write phase — build each subpanel to its per-category schema and emit the CSV.
+report <- list()
+for (stem in names(sources)) {
+  s   <- sources[[stem]]
+  out <- switch(s$kind,
+                celltype = build_celltype(s$df),
+                pathway  = build_pathway(s$df, s$term),
+                residual = build_residual(s$df))
+  write_csv(out, file.path(panc_dir, paste0(stem, ".csv")))
+  report[[stem]] <- data.frame(subpanel = stem, n_genes = nrow(out),
+                               schema = s$kind, stringsAsFactors = FALSE)
+}
 rep <- do.call(rbind, report); rownames(rep) <- NULL
 
 # ---------------------------------------------------------------------------
@@ -215,15 +239,7 @@ cat(sprintf("\nWrote %d subpanel files to %s\n", nrow(rep),
 cat(sprintf("  by schema: %s\n",
             paste(sprintf("%s=%d", names(table(rep$schema)), table(rep$schema)),
                   collapse = ", ")))
-
-# Accuracy: every subpanel gene should be in the 5K reference universe.
-non5k <- rep[rep$n_non5k > 0L, c("subpanel", "n_non5k")]
-if (nrow(non5k)) {
-  cat("\n[WARN] subpanels with genes NOT in the 5K reference:\n")
-  print(non5k, row.names = FALSE)
-} else {
-  cat("[OK] every subpanel gene is in the 5K reference (5K-only guarantee holds)\n")
-}
+cat("[OK] every subpanel gene is in the 5K reference (validated before writing)\n")
 
 # Consistency: gene counts should match subpanel_summary.csv (numbered panels).
 if (file.exists(summary_path)) {
@@ -241,5 +257,5 @@ if (file.exists(summary_path)) {
   }
 }
 
-cat("\nNext: set `use_shared_subpanels: false` in",
-    "data/tissues/pancreas/manifest.yml so the app reads these files.\n")
+cat("\nDone. The pancreas manifest already sets `use_shared_subpanels: false`",
+    "so the app reads these files; verify it if adapting this for a new tissue.\n")
