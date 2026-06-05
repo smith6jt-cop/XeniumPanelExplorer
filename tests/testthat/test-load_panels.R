@@ -16,7 +16,8 @@ test_that("load_panels composes a tissue with the legacy panels shape", {
   expect_true("full_name" %in% names(panels$reference_5k))
   expect_false(any(grepl("^detection_pct_", names(panels$reference_5k))))
 
-  # Subpanels: shared + tissue, each annotated with audit + biology join.
+  # Subpanels: tissue-local (manifest sets use_shared_subpanels: false); each
+  # already carries audit + biology columns on disk, re-asserted by the join.
   expect_gt(length(panels$subpanels), 50)
   for (key in names(panels$subpanels)) {
     df <- panels$subpanels[[key]]
@@ -27,9 +28,10 @@ test_that("load_panels composes a tissue with the legacy panels shape", {
     expect_true("log2_detection_ratio"  %in% names(df), info = key)
   }
 
-  # Pancreas-specific subpanels live under tissues/pancreas/subpanels.
+  # All pancreas subpanels are materialized under tissues/pancreas/subpanels/
+  # (cell-type, pathway, and residual), so both pancreas-specific and the
+  # general biology subpanels resolve there.
   expect_true("01_pancreas_endocrine" %in% names(panels$subpanels))
-  # Generic biology subpanels live under subpanels_shared/.
   expect_true("03_immune_T_cell" %in% names(panels$subpanels))
 
   # Custom panel
