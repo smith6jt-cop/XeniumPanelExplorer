@@ -7,6 +7,26 @@ broad-lineage masks via `scripts/tissue_markers/<tissue>.py::SUBPANEL_ALLOWLIST`
 That repo is out of scope to edit from here; the machine-readable source for
 all of the below is `data/panel_roles.csv` + `data/panel_gene_roles.csv`.
 
+## 0. Score `identity_core`, not the panel mean (the important one)
+Each cell-type identity panel is an over-inclusive **feature pool** (subclass +
+state + cell-cycle + broad genes). Scoring the panel **mean** mislabels
+off-lineage cells — a proliferating acinar cell scores high on the cell-cycle-
+padded B-cell panel. Instead score the per-panel **`identity_core`** by
+**absolute** expression (not a z-scored mean):
+- `data/identity_core/<panel>.csv` (shared panels) and
+  `data/tissues/<tissue>/identity_core/<panel>.csv` (tissue panels) — the
+  `identity`-tier genes only.
+- `data/panel_roles.csv::n_identity_genes` — the core size per panel.
+- `data/panel_gene_roles.csv` — the full per-gene tier
+  (`identity`/`subclass`/`state`/`non_specific`/`epithelial_general`) with
+  `subtype_hint`, `cl_anchor`, `cl_terms`, `evidence`. Call the lineage from
+  `identity_core`, then refine subtype with `subclass` markers.
+- `data/identity_audit_<tissue>.csv` — genes whose section-level detection looks
+  ubiquitous (candidate non-specific) — review before relying on them.
+
+Method/anchors/limitations: `docs/panel_classification.md` §"Gene-level identity
+classification"; reproducibility inputs: `data/ontology/README.md`.
+
 ## 1. Keep the allowlist identity-only — it already is
 The current `SUBPANEL_ALLOWLIST`s map **only Tier-1 identity panels** to
 lineages (11 files → 8 lineages for pancreas; 15 → 8 for thymus). This matches
