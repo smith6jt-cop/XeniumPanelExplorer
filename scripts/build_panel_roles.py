@@ -25,10 +25,6 @@ no R runtime is assumed where it was authored.)
 import csv
 import os
 import re
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import derive_identity_panels as derive  # noqa: E402  (cell-type identity classifier)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA = os.path.join(ROOT, "data")
@@ -327,13 +323,12 @@ MIXED = {
 }
 
 
-def build_gene_roles_mixed():
+def build_gene_roles_mixed(ct_terms):
     """Mixed/program-panel gene curation, upgraded to the unified 10-column
     schema used by derive_identity_panels.  These panels (08/09/10/14, thymus
     11/17/19/20) bundle a few lineage markers among program genes and were
     classified by hand from the literature, so evidence='canonical'; cl_terms
-    is the gene's reference cell_type, kept for context."""
-    ct_terms, _ = derive.load_reference()
+    is the gene's reference cell_type (passed in), kept for context."""
     rows = []
     for (source, stem, path), spec in MIXED.items():
         dtier, dhint, dnote = spec["default"]
@@ -346,14 +341,22 @@ def build_gene_roles_mixed():
 
 
 if __name__ == "__main__":
+    import sys
     from collections import Counter
+    # Import the cell-type identity classifier lazily (sibling module in scripts/)
+    # so importing build_panel_roles as a library has no ontology-parsing side
+    # effect and there is no import-time cycle.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import derive_identity_panels as derive
+
     # 1. CL-based classification of every cell-type identity panel
     #    (+ identity_core/, identity_audit_*, identity_epithelial_general_*).
     res = derive.run(write_outputs=True)
     # 2. panel_roles.csv, now carrying n_identity_genes.
     pr = build_panel_roles(res["n_identity"])
     # 3. unified panel_gene_roles.csv = hand-curated mixed rows + cell-type rows.
-    mixed = build_gene_roles_mixed()
+    ct_terms, _ = derive.load_reference()
+    mixed = build_gene_roles_mixed(ct_terms)
     derive.write_panel_gene_roles(res["rows"], mixed)
 
     # --- validation summary ---

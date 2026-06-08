@@ -46,8 +46,11 @@ to ``data/panel_roles.csv``):
   * data/identity_audit_<tissue>.csv        specificity check on each identity_core
   * data/identity_epithelial_general_<tissue>.csv   shared-epithelium genes
 
-Run standalone (`python3 scripts/derive_identity_panels.py`) to regenerate the
-full unified file plus all of the above; or via `build_panel_roles.py`.
+Run `python3 scripts/build_panel_roles.py` to regenerate everything (it merges
+the mixed-panel rows into the unified file). Running this module standalone
+(`python3 scripts/derive_identity_panels.py`) writes only the identity_core /
+audit / epithelial-general outputs and prints a summary — useful while iterating
+on the classifier without rebuilding panel_roles.
 
 Stdlib only; the classification is curated metadata, not a numeric recompute.
 """
@@ -462,7 +465,7 @@ def load_detection(tissue):
                 try:
                     vals.append(float(r[c]))
                 except (TypeError, ValueError):
-                    pass
+                    vals.append(0.0)  # blank pct = not detected; keep run alignment
             if vals:
                 det[r["gene"].strip()] = (vals[0], vals[-1], max(vals))
     return det, dcols
@@ -530,7 +533,7 @@ def _term_names(ids, cap=6):
 def classify_gene(gene, lin, ct_terms, is_program, force_state=False):
     """Return (tier, lineage_hint, subtype_hint, cl_anchor, cl_terms, evidence, note)."""
     canon = CANONICAL.get(lin.key, {})
-    term_ids, unmapped = map_terms(ct_terms)
+    term_ids, _ = map_terms(ct_terms)
     supports = [t for t in term_ids if any(a in ancestors(t) for a in lin.anchors)]
     n_mapped = len(term_ids)
 
@@ -638,15 +641,9 @@ def classify_celltype_panels():
     program = build_program_union()
     cellcycle = build_cellcycle_union()
     det = {t: load_detection(t) for t in TISSUE_DIR}
-    # Which tissue(s) use each (source, stem) -> for detection-based audit.
-    tissue_use = {"pancreas": set(), "thymus": set()}
-    for (src, stem) in PANEL_LINEAGE:
-        if src == "shared":
-            tissue_use["pancreas"].add(stem)
-            tissue_use["thymus"].add(stem)   # thymus appends shared 15/16; harmless for others
-        else:
-            tissue_use[src].add(stem)
-    # Restrict shared-panel audit to the panels each tissue actually masks with.
+    # Per-tissue audit covers each tissue's own panels plus the shared panels it
+    # actually masks with (pancreas uses the shared immune/vascular/neural set;
+    # thymus appends only shared neural + epithelial-general).
     SHARED_BY_TISSUE = {
         "pancreas": {"03_immune_T_cell", "04_immune_B_plasma", "05_immune_NK_ILC",
                      "06_immune_myeloid", "07_immune_granulocyte",
@@ -755,12 +752,12 @@ def run(write_outputs=True):
 
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+    # Standalone: classify and write the identity_core / audit / epithelial-general
+    # outputs, and print a summary. The unified data/panel_gene_roles.csv (which
+    # also needs the hand-curated mixed-panel rows) is written by the orchestrator
+    # `python3 scripts/build_panel_roles.py`; this module never imports it.
     from collections import Counter
     res = run(write_outputs=True)
-    # Standalone: also write the full unified gene-roles file (mixed + cell-type)
-    # by importing the hand-curated mixed rows from build_panel_roles.
-    import build_panel_roles as bpr
-    write_panel_gene_roles(res["rows"], bpr.build_gene_roles_mixed())
 
     print("CL release:", cl_data_version())
     print("cell-type gene rows: %d across %d panels"
