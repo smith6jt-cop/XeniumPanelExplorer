@@ -52,4 +52,6 @@ Suggests:
     zellkonverter,
     SingleCellExperiment,
     SummarizedExperiment
+Remotes:
+    immunogenomics/presto
 Config/testthat/edition: 3
