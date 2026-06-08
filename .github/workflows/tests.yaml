@@ -51,7 +51,7 @@ jobs:
             any::chromote
 
       # chromote/shinytest2 need a Chrome binary for the end-to-end smoke test.
-      - uses: browser-actions/setup-chrome@v1
+      - uses: browser-actions/setup-chrome@v2
         with:
           chrome-version: stable
 
