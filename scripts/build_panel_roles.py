@@ -139,27 +139,35 @@ def panel_default(stem):
     return ("UNCLASSIFIED", "review", "?", None, "no role rule matched -- review")
 
 
-def build_panel_roles():
+def build_panel_roles(n_identity=None):
+    """One row per (tissue, subpanel).  `n_identity` maps (source, stem) ->
+    identity_core size (from derive_identity_panels); blank where not a
+    cell-type identity panel."""
+    n_identity = n_identity or {}
     rows = []
     for tissue, sdir in TISSUES.items():
         stems = sorted(s[:-4] for s in os.listdir(sdir) if s.endswith(".csv"))
         for stem in stems:
             tier, use, grp, src, note = PANEL_ROLES.get(tissue, {}).get(stem) or panel_default(stem)
+            resolved = "shared" if src == "shared" else tissue
             read_from = os.path.join(SHARED, stem + ".csv") if src == "shared" else os.path.join(sdir, stem + ".csv")
             srcpath = ("subpanels_shared/%s.csv" % stem) if src == "shared" \
                       else ("data/tissues/%s/subpanels/%s.csv" % (tissue, stem))
             rows.append([tissue, stem, tier, use, grp,
                          n_genes(read_from if os.path.exists(read_from) else os.path.join(sdir, stem + ".csv")),
+                         n_identity.get((resolved, stem), ""),
                          srcpath, note])
         for stem, tier, use, grp, note in SHARED_APPEND.get(tissue, []):
             rows.append([tissue, stem, tier, use, grp,
                          n_genes(os.path.join(SHARED, stem + ".csv")),
+                         n_identity.get(("shared", stem), ""),
                          "subpanels_shared/%s.csv" % stem, note])
     out = os.path.join(DATA, "panel_roles.csv")
     with open(out, "w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["tissue", "subpanel", "tier", "phenotyping_use",
-                    "lineage_or_group", "n_genes", "phenotyping_source", "note"])
+                    "lineage_or_group", "n_genes", "n_identity_genes",
+                    "phenotyping_source", "note"])
         w.writerows(rows)
     return rows
 
@@ -315,26 +323,44 @@ MIXED = {
 }
 
 
-def build_gene_roles():
-    out = os.path.join(DATA, "panel_gene_roles.csv")
-    n = 0
-    with open(out, "w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["source", "subpanel", "gene", "gene_tier", "lineage_hint", "note"])
-        for (source, stem, path), spec in MIXED.items():
-            dtier, dhint, dnote = spec["default"]
-            for g in gene_col(path):
-                tier, hint, note = spec["genes"].get(g, (dtier, dhint, dnote))
-                w.writerow([source, stem, g, tier, hint, note])
-                n += 1
-    return n
+def build_gene_roles_mixed(ct_terms):
+    """Mixed/program-panel gene curation, upgraded to the unified 10-column
+    schema used by derive_identity_panels.  These panels (08/09/10/14, thymus
+    11/17/19/20) bundle a few lineage markers among program genes and were
+    classified by hand from the literature, so evidence='canonical'; cl_terms
+    is the gene's reference cell_type (passed in), kept for context."""
+    rows = []
+    for (source, stem, path), spec in MIXED.items():
+        dtier, dhint, dnote = spec["default"]
+        for g in gene_col(path):
+            tier, hint, note = spec["genes"].get(g, (dtier, dhint, dnote))
+            cl_terms = ";".join(ct_terms.get(g, [])[:6])
+            rows.append([source, stem, g, tier, hint, "", "", cl_terms,
+                         "canonical", note])
+    return rows
 
 
 if __name__ == "__main__":
-    pr = build_panel_roles()
-    ng = build_gene_roles()
-    # --- validation summary ---
+    import sys
     from collections import Counter
+    # Import the cell-type identity classifier lazily (sibling module in scripts/)
+    # so importing build_panel_roles as a library has no ontology-parsing side
+    # effect and there is no import-time cycle.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import derive_identity_panels as derive
+
+    # 1. CL-based classification of every cell-type identity panel
+    #    (+ identity_core/, identity_audit_*, identity_epithelial_general_*).
+    res = derive.run(write_outputs=True)
+    # 2. panel_roles.csv, now carrying n_identity_genes.
+    pr = build_panel_roles(res["n_identity"])
+    # 3. unified panel_gene_roles.csv = hand-curated mixed rows + cell-type rows.
+    ct_terms, _ = derive.load_reference()
+    mixed = build_gene_roles_mixed(ct_terms)
+    derive.write_panel_gene_roles(res["rows"], mixed)
+
+    # --- validation summary ---
+    print("CL release:", derive.cl_data_version())
     print("panel_roles.csv: %d rows" % len(pr))
     for t in ("pancreas", "thymus"):
         c = Counter(r[3] for r in pr if r[0] == t)
@@ -344,4 +370,7 @@ if __name__ == "__main__":
         bad = [r[1] for r in pr if r[0] == t and r[2] == "UNCLASSIFIED"]
         if bad:
             print("  [WARN] unclassified in %s: %s" % (t, bad))
-    print("panel_gene_roles.csv: %d gene rows" % ng)
+    tiers = Counter(r[3] for r in res["rows"])
+    print("panel_gene_roles.csv: %d mixed + %d cell-type = %d rows"
+          % (len(mixed), len(res["rows"]), len(mixed) + len(res["rows"])))
+    print("  cell-type tier counts:", dict(tiers))
